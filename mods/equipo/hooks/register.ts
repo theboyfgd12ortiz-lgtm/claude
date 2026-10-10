@@ -1,12 +1,15 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Investigacion, Registro } from '../types'
-import { AGENTES, ahorro, familiaDe, GUIA, modeloParaAgente, slug } from './reglas'
+import type { Aprendizaje, Investigacion, Registro } from '../types'
+import { aprender, esBueno, lecciones, modeloAprendido } from './aprende'
+import { AGENTES, ahorro, costo, familiaDe, GUIA, modeloParaAgente, slug } from './reglas'
 
 const agentes = atom({ plugin: 'equipo', key: 'agentes' } as const, [])
 const investigacion = atom({ plugin: 'equipo', key: 'investigacion' } as const, null)
 const isAuto = atom({ plugin: 'equipo', key: 'isAuto' } as const, true)
+const aprendizaje = atom({ plugin: 'equipo', key: 'aprendizaje' } as const, {})
+const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
 
 /** Cuántos agentes se recuerdan para el panel. */
 const MAX = 40
@@ -27,6 +30,12 @@ export const resumenEquipo = (lista: readonly Registro[]): string => {
   return `${lista.length} agentes (${porModelo})${trabajando > 0 ? `, ${trabajando} trabajando` : ''} · ahorro estimado ~${Math.round(ahorrado / 1000).toLocaleString('es')}k unidades (comparado con hacerlo todo con el modelo del director; es una estimación).`
 }
 
+/** Cambia lo aprendido y lo guarda para la próxima sesión. */
+const recordar = async ($: EngineInterface, cambio: (a: Aprendizaje) => Aprendizaje) => {
+  const nuevo = await update($, aprendizaje, cambio)
+  await $.store.set('aprendizaje', nuevo).catch(() => undefined)
+}
+
 const guardar = async ($: EngineInterface, i: Investigacion): Promise<string> => {
   const archivo = `.claude/investigaciones/${slug(i.pregunta)}.md`
   await $.fs.write(archivo, `# ${i.pregunta}\n\n${i.texto}\n`)
@@ -40,14 +49,16 @@ export const register: Register = on => {
     for (const spec of AGENTES) await $.agent.register(spec).catch(() => undefined)
     await $.command.register({
       name: 'equipo',
-      description: 'Equipo de agentes con modelos baratos: /equipo · on|off',
-      argumentHint: 'on|off',
+      description: 'Equipo de agentes con modelos baratos: /equipo · on|off · olvidar',
+      argumentHint: 'on|off|olvidar',
     })
     await $.command.register({
       name: 'investigar',
       description: 'Investiga en internet con un agente barato: /investigar <pregunta> · ver · guardar',
       argumentHint: '<pregunta> | ver | guardar',
     })
+    const guardado = await $.store.get('aprendizaje').catch(() => undefined)
+    if (guardado !== null && typeof guardado === 'object' && !Array.isArray(guardado)) await update($, aprendizaje, () => guardado as Aprendizaje)
     if ((await $.store.get('isAuto').catch(() => undefined)) === false) await update($, isAuto, () => false)
 
     return next(e)
@@ -57,8 +68,13 @@ export const register: Register = on => {
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
     if (e.traits.includes('bare') || e.traits.includes('analysis') || !(await read($, isAuto))) return composed
+    // Con el presupuesto apretado se trabaja sin lanzar agentes: la guía solo estorbaría.
+    const tope = (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax
+    if (tope !== undefined && tope !== null) return composed
+    const aprendido = lecciones(await read($, aprendizaje))
+    const texto = aprendido.length === 0 ? GUIA : `${GUIA}\nLo que el equipo ya aprendió:\n${aprendido.map(l => `- ${l}`).join('\n')}`
 
-    return { sections: [...composed.sections, { id: 'equipo:guia', text: GUIA, scope: 'session' }] }
+    return { sections: [...composed.sections, { id: 'equipo:guia', text: texto, scope: 'session' }] }
   })
 
   // 2. Un agente sin modelo propio corre con el más barato que sirva.
@@ -66,7 +82,7 @@ export const register: Register = on => {
     const objetivo =
       e.fork || e.isTeammate === true || e.workflow !== undefined || !(await read($, isAuto))
         ? undefined
-        : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: e.parentModel, fork: false })
+        : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: e.parentModel, fork: false, aprendido: modeloAprendido(await read($, aprendizaje), e.subagentType) })
     const lanzado = await next(objetivo === undefined ? e : { ...e, model: objetivo })
     if (lanzado.deny !== undefined || lanzado.agentId === undefined) return lanzado
 
@@ -107,7 +123,9 @@ export const register: Register = on => {
       )
     }
     const fin = await $.clock.now()
-    await update($, agentes, l => l.map(r => (r.id === id ? { ...r, estado: 'listo' as const, fin } : r)))
+    const lista = await update($, agentes, l => l.map(r => (r.id === id ? { ...r, estado: 'listo' as const, fin } : r)))
+    const reg = lista.find(r => r.id === id)
+    if (reg !== undefined) await recordar($, a => aprender(a, reg.tipo, reg.familia, esBueno(e.reason, e.answer), costo(reg, reg.familia)))
     const actual = await read($, investigacion)
     if (actual !== null && actual.estado === 'trabajando' && actual.id === id) {
       const texto = e.reason === 'answer' && typeof e.answer === 'string' ? e.answer.trim() : ''
@@ -124,9 +142,11 @@ export const register: Register = on => {
       await update($, isAuto, () => arg === 'on')
       await $.store.set('isAuto', arg === 'on').catch(() => undefined)
     }
+    if (arg === 'olvidar') await recordar($, () => ({}))
     const auto = await read($, isAuto)
+    const aprendido = lecciones(await read($, aprendizaje))
 
-    return { text: `Equipo ${auto ? 'activo' : 'apagado'}. ${resumenEquipo(await read($, agentes))}` }
+    return { text: [`Equipo ${auto ? 'activo' : 'apagado'}. ${resumenEquipo(await read($, agentes))}`, ...aprendido.map(l => `· ${l}`)].join('\n') }
   })
 
   on('command.run', { command: 'investigar' }, async ($, e) => {

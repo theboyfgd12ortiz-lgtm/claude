@@ -15,7 +15,8 @@
     "mejorar-prompt",
     "respaldo",
     "web",
-    "memoria"
+    "memoria",
+    "equipo"
   ],
   "types": "./types/index.d.ts"
 }

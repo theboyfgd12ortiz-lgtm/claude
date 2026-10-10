@@ -21,7 +21,9 @@ test('no toca lo que ya eligió alguien, ni bifurcaciones, ni directores igual d
   expect(modeloParaAgente({ ...base, tipo: 'Explore', pedido: 'opus' })).toBeUndefined()
   expect(modeloParaAgente({ ...base, tipo: 'Explore', fork: true })).toBeUndefined()
   expect(modeloParaAgente({ ...base, tipo: 'otro-tipo' })).toBeUndefined()
-  expect(modeloParaAgente({ ...base, tipo: 'equipo:obrero', padre: 'claude-sonnet-5-5' })).toBeUndefined()
+  expect(modeloParaAgente({ ...base, tipo: 'equipo:obrero', padre: 'claude-sonnet-5-5' })).toBe('sonnet')
+  expect(modeloParaAgente({ ...base, tipo: 'Explore', padre: 'claude-sonnet-5-5', aprendido: 'sonnet' })).toBeUndefined()
+  expect(modeloParaAgente({ ...base, tipo: 'equipo:explorador', aprendido: 'sonnet' })).toBe('sonnet')
 })
 
 test('el ahorro compara con el modelo del director', () => {
@@ -61,4 +63,22 @@ test('el hook baja el modelo del agente y lo anota con su gasto', async ($, on) 
   const texto = (await $.command.run({ command: 'equipo', args: '', ...CMD } as never)).text
   expect(texto).toMatch(/1 con haiku\)/)
   expect(texto).not.toMatch(/trabajando/)
+})
+
+test('el equipo aprende: dos fallos del explorador y la próxima vez corre con Sonnet', async ($, on) => {
+  on('clock.now', () => ({ value: 1000 }) as never)
+  on('turn.complete', () => ({ text: '' }) as never)
+  const modelos: (string | undefined)[] = []
+  let n = 0
+  on('agent.spawn', (_$, e) => {
+    modelos.push(e.model)
+
+    return { model: e.model ?? 'opus', agentId: `ag${++n}` } as never
+  })
+  for (let i = 0; i < 2; i++) {
+    await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:explorador' } as never)
+    await $.turn.complete({ agentId: `ag${i + 1}`, reason: 'answer', answer: '', usage: { input_tokens: 10, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } as never)
+  }
+  await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:explorador' } as never)
+  expect(modelos).toEqual(['haiku', 'haiku', 'sonnet'])
 })

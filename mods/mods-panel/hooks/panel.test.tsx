@@ -286,3 +286,41 @@ test('the Web tab shows the review, the services and a way to ask Claude to fix 
     await ui.unmount()
   }
 })
+
+/** A stand-in for equipo: two agents that worked, one lesson learned and a finished research. */
+const equipoSimulado = {
+  name: 'equipo',
+  register: (on: On) => {
+    on('session.start', async ($, e, next) => {
+      await $.state.set({ plugin: 'equipo', key: 'agentes' } as const, [
+        { id: 'a1', tipo: 'equipo:explorador', descripcion: 'buscar login', modelo: 'haiku', familia: 'haiku', padre: 'opus', at: 1, fin: 2, estado: 'listo', nuevo: 1000, cache: 0, escrito: 100 },
+        { id: 'a2', tipo: 'equipo:obrero', descripcion: 'cambiar botón', modelo: 'sonnet', familia: 'sonnet', padre: 'opus', at: 1, fin: null, estado: 'trabajando', nuevo: 500, cache: 0, escrito: 50 },
+      ])
+      await $.state.set({ plugin: 'equipo', key: 'aprendizaje' } as const, {
+        'equipo:explorador': { nivel: 'sonnet', recientes: [], seguidos: 0, veces: 5, unidades: 500, subidas: 1 },
+      })
+      await $.state.set({ plugin: 'equipo', key: 'investigacion' } as const, { id: 'x', pregunta: 'mejor hosting gratis', at: 1, estado: 'listo', texto: 'Netlify y Vercel.', archivo: null })
+
+      return next(e)
+    })
+  },
+}
+
+test('the Equipo tab shows agents, estimated savings, what it learned and the research', { plugins: [equipoSimulado] }, async ($, on) => {
+  mock.clock(on)
+  on('command.register', () => ({ value: { command: 'x' } }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('command.list', () => ({ value: [] }) as never)
+  on('session.start', () => ({ cwd: '/r' }) as never)
+  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'tab-equipo' })
+  expect(await ui.find({ type: 'Text', text: /% menos/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /buscar login/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /ahora con sonnet/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Netlify y Vercel/ })).toBeDefined()
+  expect(await ui.find({ key: 'eq-save' })).toBeDefined()
+  expect(await ui.find({ key: 'eq-ask' })).toBeDefined()
+  await ui.unmount()
+})

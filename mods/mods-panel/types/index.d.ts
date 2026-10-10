@@ -10,7 +10,7 @@ export type PanelExtras = {
   plugins: string[]
 }
 
-export type Tab = 'ahora' | 'cambios' | 'ahorro' | 'modelo' | 'web' | 'mods' | 'ayuda'
+export type Tab = 'ahora' | 'cambios' | 'ahorro' | 'modelo' | 'equipo' | 'web' | 'mods' | 'ayuda'
 
 export type Tone = 'info' | 'ok' | 'warn' | 'bad'
 

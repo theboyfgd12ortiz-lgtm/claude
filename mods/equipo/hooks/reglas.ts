@@ -41,14 +41,22 @@ export const MODELO_POR_TIPO: Record<string, 'haiku' | 'sonnet'> = {
  * El modelo que se pone a un subagente que no trae uno, o undefined si no hay que tocar nada:
  * quien lo lanza ya eligió, es una bifurcación, no hay regla, o el director ya es igual de barato.
  */
-export const modeloParaAgente = (a: { tipo: string; pedido: string | undefined; padre: string; fork: boolean }): string | undefined => {
+export const modeloParaAgente = (a: {
+  tipo: string
+  pedido: string | undefined
+  padre: string
+  fork: boolean
+  /** Lo que el equipo aprendió para este tipo; si falta, vale el de siempre. */
+  aprendido?: 'haiku' | 'sonnet' | undefined
+}): string | undefined => {
   if (a.fork || (a.pedido !== undefined && a.pedido !== '')) return undefined
-  const objetivo = MODELO_POR_TIPO[a.tipo]
+  const objetivo = a.aprendido ?? MODELO_POR_TIPO[a.tipo]
   if (objetivo === undefined) return undefined
-  // Un agente del equipo nunca cuesta más que el director (su modelo fijo es Sonnet).
-  if (a.tipo.startsWith('equipo:') && RANGO[familiaDe(a.padre)] < RANGO[objetivo]) return a.padre
+  const rangoPadre = RANGO[familiaDe(a.padre)]
+  // Un agente del equipo trae su propio modelo fijo: se pone siempre, y nunca más caro que el director.
+  if (a.tipo.startsWith('equipo:')) return rangoPadre < RANGO[objetivo] ? a.padre : objetivo
 
-  return RANGO[familiaDe(a.padre)] <= RANGO[objetivo] ? undefined : objetivo
+  return rangoPadre <= RANGO[objetivo] ? undefined : objetivo
 }
 
 const FORMATO = 'Responde en español, corto y directo: el resultado primero y nada de relleno ni saludos.'

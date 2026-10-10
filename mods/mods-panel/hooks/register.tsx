@@ -19,6 +19,7 @@ import {
   personText,
   resetLabel,
   usageColor,
+  equipoCostos,
   planAdd,
   planFromTodos,
   planUpdate,
@@ -69,6 +70,10 @@ const presupuestoAuto = { plugin: 'presupuesto', key: 'isAuto' } as const
 const memoriaNotas = { plugin: 'memoria', key: 'notas' } as const
 const memoriaCuando = { plugin: 'memoria', key: 'at' } as const
 const memoriaAuto = { plugin: 'memoria', key: 'isAuto' } as const
+const equipoAgentes = { plugin: 'equipo', key: 'agentes' } as const
+const equipoInvest = { plugin: 'equipo', key: 'investigacion' } as const
+const equipoAuto = { plugin: 'equipo', key: 'isAuto' } as const
+const equipoAprende = { plugin: 'equipo', key: 'aprendizaje' } as const
 const webInforme = { plugin: 'web', key: 'informe' } as const
 const webServicios = { plugin: 'web', key: 'servicios' } as const
 const webUrls = { plugin: 'web', key: 'urls' } as const
@@ -89,6 +94,7 @@ const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'cambios', label: 'Cambios' },
   { id: 'ahorro', label: 'Ahorro' },
   { id: 'modelo', label: 'Modelo' },
+  { id: 'equipo', label: 'Equipo' },
   { id: 'web', label: 'Web' },
   { id: 'mods', label: 'Mods' },
   { id: 'ayuda', label: 'Ayuda' },
@@ -799,6 +805,84 @@ export const register: Register = on => {
           )}
         </Box>
       )
+    } else if (current === 'equipo') {
+      const lista = (await $.state.get(equipoAgentes)).value ?? []
+      const hayEquipo = x.plugins.includes('equipo') || lista.length > 0
+      const invest = (await $.state.get(equipoInvest)).value ?? null
+      const autoEq = (await $.state.get(equipoAuto)).value ?? true
+      const aprendido = Object.entries((await $.state.get(equipoAprende)).value ?? {})
+      const costos = equipoCostos(lista)
+      const COLOR_FAM = { haiku: 'success', sonnet: 'warning', opus: 'error', otro: 'inactive' } as const
+      body = !hayEquipo ? (
+        <Section title="EQUIPO">
+          <Text dimColor>El mod "equipo" no está instalado. Corre el instalador para tenerlo.</Text>
+        </Section>
+      ) : (
+        <Box flexDirection="column">
+          <Section title="CÓMO TRABAJA">
+            <Text wrap="wrap" dimColor>Claude dirige y reparte lo pesado (buscar, leer, investigar, revisar) a modelos más baratos. Aprende: si uno barato falla seguido, sube a Sonnet; si luego acierta mucho, vuelve a probar el barato.</Text>
+            <Box flexDirection="row" columnGap={1} marginTop={1}>
+              <Button key="eq-auto" label={autoEq ? 'Equipo: activo' : 'Equipo: apagado'} variant={autoEq ? 'primary' : 'secondary'} onPress={() => $.command.run({ command: 'equipo', args: autoEq ? 'off' : 'on' })} />
+              <Button key="eq-forget" label="Olvidar lo aprendido" onPress={() => $.command.run({ command: 'equipo', args: 'olvidar' })} />
+            </Box>
+          </Section>
+
+          <Section title="AHORRO ESTIMADO">
+            {lista.length === 0 ? (
+              <Text dimColor>Aún no trabajó ningún agente. Cuando Claude reparta una tarea, aquí verás cuánto se ahorró.</Text>
+            ) : (
+              <Text wrap="wrap">
+                <Text bold color={costos.porcentaje >= 30 ? 'success' : 'warning'}>~{costos.porcentaje}% menos</Text>
+                <Text dimColor> que haciéndolo todo con el modelo principal · {lista.length} agentes · es una estimación con los precios relativos de cada modelo, no tu factura</Text>
+              </Text>
+            )}
+          </Section>
+
+          <Section title="AGENTES">
+            {lista.length === 0 && <Text dimColor>Nadie ha trabajado todavía.</Text>}
+            {lista.slice(0, 8).map(r => (
+              <Text key={`eq-${r.id}`} wrap="truncate-end">
+                <Text color={r.estado === 'trabajando' ? 'warning' : 'success'}>{r.estado === 'trabajando' ? '●' : '✓'}</Text>{' '}
+                <Text color={COLOR_FAM[r.familia]}>{r.familia}</Text> <Text bold>{r.tipo.replace('equipo:', '')}</Text>{' '}
+                <Text dimColor>{r.descripcion} · {short(r.nuevo + r.cache + r.escrito)} tokens</Text>
+              </Text>
+            ))}
+          </Section>
+
+          <Section title="LO QUE HA APRENDIDO">
+            {aprendido.length === 0 && <Text dimColor>Todavía nada: aprende con cada tarea que reparte.</Text>}
+            {aprendido.map(([tipo, r]) => (
+              <Text key={`ap-${tipo}`} wrap="truncate-end">
+                <Text bold>{tipo.replace('equipo:', '')}</Text>{' '}
+                <Text dimColor>
+                  {r.veces} {r.veces === 1 ? 'trabajo' : 'trabajos'} · {r.nivel === null ? 'modelo de siempre' : `ahora con ${r.nivel}`}
+                  {r.subidas > 0 ? ` · lo subió ${r.subidas} ${r.subidas === 1 ? 'vez' : 'veces'}` : ''}
+                </Text>
+              </Text>
+            ))}
+          </Section>
+
+          <Section title="INVESTIGAR EN INTERNET">
+            <Text dimColor>Un agente barato (Haiku) busca y te responde con fuentes.</Text>
+            {Input !== undefined && (
+              <Input key="eq-ask" label="Pregunta " placeholder="¿Qué quieres saber?" value="" submitLabel="investigar" onSubmit={(v: string) => $.command.run({ command: 'investigar', args: v })} />
+            )}
+            {invest !== null && (
+              <Box flexDirection="column" marginTop={1}>
+                <Text bold wrap="truncate-end">{invest.pregunta}</Text>
+                {invest.estado === 'trabajando' && <Text color="warning">Investigando…</Text>}
+                {invest.estado === 'fallo' && <Text color="error">No salió: prueba de nuevo.</Text>}
+                {invest.estado === 'listo' && <Text wrap="wrap">{invest.texto.length > 900 ? `${invest.texto.slice(0, 900)}…` : invest.texto}</Text>}
+                {invest.estado === 'listo' && (
+                  <Box flexDirection="row" columnGap={1} marginTop={1}>
+                    <Button key="eq-save" label={invest.archivo === null ? 'Guardar en el proyecto' : `Guardado: ${invest.archivo}`} onPress={() => $.command.run({ command: 'investigar', args: 'guardar' })} />
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Section>
+        </Box>
+      )
     } else if (current === 'web') {
       const informeW = (await $.state.get(webInforme)).value
       const serviciosW = (await $.state.get(webServicios)).value ?? []
@@ -949,6 +1033,14 @@ export const register: Register = on => {
             ? 'no instalado'
             : `${(await $.state.get(memoriaNotas)).value ?? 0} notas${((await $.state.get(memoriaCuando)).value ?? 0) > 0 ? ` · actualizada ${hace((await $.state.get(memoriaCuando)).value ?? now, now)}` : ''}`,
           action: x.plugins.includes('memoria') ? { label: 'Actualizar ahora', press: () => $.command.run({ command: 'memoria', args: 'actualizar' }) } : undefined,
+        },
+        {
+          key: 'equipo',
+          on: x.plugins.includes('equipo') && ((await $.state.get(equipoAuto)).value ?? true),
+          name: 'Equipo',
+          what: 'Reparte el trabajo pesado a modelos baratos (Haiku, Sonnet), aprende de sus fallos y puede investigar en internet.',
+          stat: !x.plugins.includes('equipo') ? 'no instalado' : `${((await $.state.get(equipoAgentes)).value ?? []).length} agentes han trabajado`,
+          action: x.plugins.includes('equipo') ? { label: 'Abrir', press: () => update($, tab, () => 'equipo' as const) } : undefined,
         },
         {
           key: 'web',
