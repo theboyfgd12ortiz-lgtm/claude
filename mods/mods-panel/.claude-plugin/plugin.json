@@ -1,6 +1,5 @@
 {
   "name": "mods-panel",
-  "version": "0.2.0",
   "description": "Un panel (/mods) que explica en español qué hace cada mod y muestra su estado en vivo.",
   "author": {
     "name": "theboyfgd12ortiz-lgtm"
@@ -11,5 +10,6 @@
     "quality-coach",
     "token-meter",
     "selector-modelo"
-  ]
+  ],
+  "types": "./types/index.d.ts"
 }

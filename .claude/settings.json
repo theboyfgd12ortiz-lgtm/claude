@@ -5,14 +5,22 @@
         "source": "github",
         "repo": "theboyfgd12ortiz-lgtm/claude"
       }
+    },
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
     }
   },
   "enabledPlugins": {
     "selector-modelo@claude-mods": true,
+    "rtk-hook@claude-mods": true,
     "guardian@claude-mods": true,
     "output-trim@claude-mods": true,
     "quality-coach@claude-mods": true,
     "token-meter@claude-mods": true,
-    "mods-panel@claude-mods": true
+    "mods-panel@claude-mods": true,
+    "caveman@caveman": true
   }
 }

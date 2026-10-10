@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { percent, short } from './register'
+import { parseRtk, percent, short } from './register'
 
 test('formats numbers', () => {
   expect(short(999)).toBe('999')
@@ -49,4 +49,13 @@ test('shows the model selector as active when its /nivel command exists', async 
   expect(await ui.find({ type: 'Text', text: /Ahora: nivel 4 de 9/ })).toBeDefined()
   expect(await ui.find({ key: 'sel-auto' })).toBeDefined()
   await ui.unmount()
+})
+
+test('reads rtk savings from its json', () => {
+  const gain = '{"summary":{"total_commands":7,"total_saved":13747,"avg_savings_pct":65.66}}'
+  expect(parseRtk('rtk 0.49.0\n', gain)).toEqual({ version: '0.49.0', commands: 7, saved: 13747, percent: 66 })
+})
+
+test('survives rtk output it does not understand', () => {
+  expect(parseRtk('rtk 0.49.0', 'not json')).toEqual({ version: '0.49.0', commands: 0, saved: 0, percent: 0 })
 })

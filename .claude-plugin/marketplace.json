@@ -11,6 +11,11 @@
       "description": "Elige solo el modelo y esfuerzo de cada petición (Haiku → Sonnet → Opus) para gastar lo justo."
     },
     {
+      "name": "rtk-hook",
+      "source": "./mods/rtk-hook",
+      "description": "Reescribe los comandos de Bash para que pasen por rtk y devuelvan menos texto (usa el programa rtk, Apache-2.0)."
+    },
+    {
       "name": "guardian",
       "source": "./mods/guardian",
       "description": "Bloquea comandos destructivos y lecturas de secretos antes de que se ejecuten."

@@ -16,6 +16,10 @@ describe('rules', () => {
       'cat .env',
       'grep KEY .env.local',
       'cat ~/.ssh/id_rsa',
+      'sudo rm -rf /',
+      'bash -c "rm -rf ~"',
+      'eval "git push --force"',
+      'FOO=1 rm -rf $HOME',
     ]) {
       expect(judgeCommand(cmd)).toBeDefined()
     }
@@ -32,6 +36,11 @@ describe('rules', () => {
       'npm test',
       'grep -rn "env" src',
       'cp .env.example .env',
+      'echo "rm -rf /"',
+      'git commit -m "docs: never run rm -rf / or mkfs"',
+      'rtk rewrite "git push --force"',
+      'grep -n "mkfs" notes.txt',
+      'bash -c "ls -la"',
     ]) {
       expect(judgeCommand(cmd)).toBeUndefined()
     }

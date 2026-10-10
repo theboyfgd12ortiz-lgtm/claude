@@ -1,7 +1,8 @@
 {
   "name": "selector-modelo",
-  "version": "3.1.0",
   "description": "Elige solo el modelo y el esfuerzo de cada petición (9 niveles, de Haiku a Opus) para gastar lo justo; /nivel para verlo o fijarlo.",
-  "author": { "name": "theboyfgd12ortiz-lgtm" },
+  "author": {
+    "name": "theboyfgd12ortiz-lgtm"
+  },
   "types": "./types/index.d.ts"
 }

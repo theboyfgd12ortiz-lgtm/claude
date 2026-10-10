@@ -481,7 +481,7 @@ No uses opus para trabajo mecánico. Pocos agentes y bien repartidos.`,
           scope: 'session',
           text: `# Hábitos para ahorrar tokens (siempre, sin que te lo pidan)
 Respuestas:
-- Responde corto y directo (estilo caveman): la respuesta primero, sin saludos, resúmenes ni ofrecimientos al final. Código, rutas y errores siempre exactos.
+- Responde corto y directo: la respuesta primero, sin saludos, resúmenes ni ofrecimientos al final. Código, rutas y errores siempre exactos.
 - A un saludo o pregunta simple, una o dos frases. No uses herramientas si no hacen falta.
 Leer y buscar:
 - Busca con Grep/Glob antes de abrir archivos; abre solo las líneas que necesitas (offset/limit). No vuelvas a leer un archivo que ya leíste o editaste.

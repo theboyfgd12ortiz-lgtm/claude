@@ -1,0 +1,8 @@
+{
+  "name": "rtk-hook",
+  "description": "Ahorra tokens: reescribe los comandos de Bash (git, ls, grep, tests...) para que pasen por rtk, que recorta su salida. Si rtk no está instalado, no hace nada.",
+  "author": {
+    "name": "theboyfgd12ortiz-lgtm"
+  },
+  "license": "Apache-2.0"
+}

@@ -1,5 +1,7 @@
-import { read } from 'claude-code'
+import { atom, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
+
+import type { PanelExtras, RtkInfo } from '../types'
 
 const PANE = 'mods-panel'
 const TITLE = 'Mis mods'
@@ -18,6 +20,49 @@ const meterTotal = { plugin: 'token-meter', key: 'total' } as const
 const selectorNivel = { plugin: 'selector-modelo', key: 'nivel' } as const
 const selectorModo = { plugin: 'selector-modelo', key: 'modo' } as const
 const selectorHistorial = { plugin: 'selector-modelo', key: 'historial' } as const
+
+const extrasRef = { plugin: 'mods-panel', key: 'extras' } as const
+const extras = atom(extrasRef, { rtk: null, hasCaveman: false })
+
+/** Turns the output of `rtk --version` and `rtk gain -f json` into what the panel shows. */
+export const parseRtk = (version: string, gain: string): RtkInfo => {
+  let sum: Record<string, number> | undefined
+  try {
+    sum = (JSON.parse(gain) as { summary?: Record<string, number> }).summary
+  } catch {
+    sum = undefined
+  }
+
+  return {
+    version: version.trim().replace(/^rtk\s+/, ''),
+    commands: sum?.total_commands ?? 0,
+    saved: sum?.total_saved ?? 0,
+    percent: Math.round(sum?.avg_savings_pct ?? 0),
+  }
+}
+
+/** Reads rtk's savings; null when rtk is not installed. */
+const readRtk = async ($: EngineInterface): Promise<RtkInfo | null> => {
+  try {
+    const run = (args: string) =>
+      $.process.run(['sh', '-c', `PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" rtk ${args}`], { timeoutMs: 5000 })
+    const v = await run('--version')
+    if (v.exitCode !== 0) return null
+    const g = await run('gain -f json')
+
+    return parseRtk(v.stdout, g.exitCode === 0 ? g.stdout : '')
+  } catch {
+    return null
+  }
+}
+
+/** Looks again at the programmes the panel reports on (rtk) and the commands present (caveman). */
+const refresh = async ($: EngineInterface) => {
+  const rtk = await readRtk($)
+  const names = await $.command.list().then(list => list.map(c => c.name), () => [] as string[])
+  const hasCaveman = names.some(n => n === 'caveman' || n.startsWith('caveman:') || n.includes(':caveman'))
+  await update($, extras, () => ({ rtk, hasCaveman }) satisfies PanelExtras)
+}
 
 /** The selector's ladder in short: 1-2 Haiku, 3-5 Sonnet, 6-9 Opus. */
 export const modeloDe = (n: number): string => (n <= 2 ? 'Haiku (barato)' : n <= 5 ? 'Sonnet (equilibrado)' : 'Opus (el más potente)')
@@ -50,6 +95,7 @@ export const snapshot = async ($: EngineInterface) => {
       ultima: ((await $.state.get(selectorHistorial)).value ?? []).at(-1),
     },
     // Which mods with a slash command are installed; an empty set if the listing fails.
+    extras: (await $.state.get(extrasRef)).value ?? { rtk: null, hasCaveman: false },
     commands: new Set(await $.command.list().then(list => list.map(c => c.name), () => [] as string[])),
     meter: {
       ...(await get($.state.get(meterActive))),
@@ -64,9 +110,18 @@ export const register: Register = on => {
     await $.command.register({ name: 'mods', description: 'Abre el panel "Mis mods": qué hace cada mod y su estado' })
     // Unasked, a pane only shows where the terminal is wide enough to dock it.
     void $.ui.open({ id: PANE, title: TITLE })
+    void refresh($)
 
     return next(e)
   })
+
+  // rtk's counters move as commands run; look again when a turn ends.
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId === undefined) void refresh($)
+
+    return done
+  }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'mods' }, async $ => {
     const opened = await $.ui.open({ id: PANE, title: TITLE })
@@ -155,6 +210,21 @@ export const register: Register = on => {
         </Box>
 
         <Box flexDirection="column">
+          <Head name="rtk (comandos más cortos)" isOn={s.extras.rtk !== null} label={s.extras.rtk === null ? 'no instalado' : `versión ${s.extras.rtk.version}`} />
+          <Text dimColor>Cuando corro git, ls, grep o tests, rtk me entrega solo lo importante en vez de todo el texto.</Text>
+          {s.extras.rtk !== null && (
+            <Text>
+              Comandos acortados: {s.extras.rtk.commands} · ahorro aprox.: {short(s.extras.rtk.saved)} tokens ({s.extras.rtk.percent}%)
+            </Text>
+          )}
+        </Box>
+
+        <Box flexDirection="column">
+          <Head name="Caveman (respuestas cortas)" isOn={s.extras.hasCaveman} />
+          <Text dimColor>Respondo sin relleno: solo lo necesario y el código exacto. Para apagarlo di "stop caveman".</Text>
+        </Box>
+
+        <Box flexDirection="column">
           <Head name="Selector de modelos" isOn={hasSelector} label={hasSelector ? (sel.modo === 'auto' ? 'automático' : 'fijo a mano') : undefined} />
           <Text dimColor>Elige solo qué tan potente (y caro) es el modelo para cada pedido: 1 = barato y rápido, 9 = máximo.</Text>
           {hasSelector && (
@@ -178,7 +248,7 @@ export const register: Register = on => {
           )}
         </Box>
 
-        <Text dimColor>Comandos: /mods este panel · /nivel selector · /guardian off|on · /tokens totales</Text>
+        <Text dimColor>Comandos: /mods este panel · /nivel selector · /guardian off|on · /tokens totales · /caveman</Text>
         <Text dimColor>Token ≈ ¾ de palabra. "Leídos" = lo que reviso para responder; "escritos" = lo que genero.</Text>
       </Box>
     )
