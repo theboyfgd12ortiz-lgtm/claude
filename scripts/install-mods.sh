@@ -77,12 +77,16 @@ third_party SKIP_TOKEN_OPTIMIZER "${PY:-python3}" alexgreensh-token-optimizer al
 
 # token-optimizer trae su propio recorte de comandos de Bash; rtk ya hace eso (y lo medimos),
 # así que se apaga el de token-optimizer para que no peleen por el mismo comando.
-if [ "${SKIP_RTK:-0}" != "1" ] && [ -n "$PY" ]; then
-  "$PY" - "$HOME/.claude/settings.json" <<'PYEOF' || warn "no pude ajustar ~/.claude/settings.json"
+# Su barra de abajo también se apaga: lo mismo se ve en el Centro de control, en un solo lugar.
+if [ -n "$PY" ]; then
+  "$PY" - "$HOME/.claude/settings.json" "${SKIP_RTK:-0}" <<'PYEOF' || warn "no pude ajustar ~/.claude/settings.json"
 import json, os, sys
-path = sys.argv[1]
+path, skip_rtk = sys.argv[1], sys.argv[2] == "1"
 data = json.load(open(path)) if os.path.exists(path) else {}
-data.setdefault("env", {})["TOKEN_OPTIMIZER_BASH_COMPRESS"] = "0"
+env = data.setdefault("env", {})
+if not skip_rtk:
+    env["TOKEN_OPTIMIZER_BASH_COMPRESS"] = "0"
+env["TOKEN_OPTIMIZER_STATUS_BAR"] = "0"
 os.makedirs(os.path.dirname(path), exist_ok=True)
 json.dump(data, open(path, "w"), indent=2)
 PYEOF

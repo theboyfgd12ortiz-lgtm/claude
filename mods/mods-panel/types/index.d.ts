@@ -33,6 +33,12 @@ export type Live = {
 /** One answered turn, for the charts. */
 export type TurnPoint = { at: number; fresh: number; cached: number; written: number; seconds: number; model: string }
 
+/** One check of what the mods need on this machine (rtk, jq, Python, Node, bash). */
+export type HealthCheck = { name: string; isOk: boolean; detail: string; why: string }
+
+/** The last thing the person typed, so the feed shows their words and not added context. */
+export type Asked = { at: number; text: string }
+
 declare module 'claude-code' {
   interface PluginState {
     'mods-panel': {
@@ -42,6 +48,8 @@ declare module 'claude-code' {
       plan: PlanItem[]
       live: Live
       history: TurnPoint[]
+      health: HealthCheck[] | null
+      asked: Asked | null
     }
   }
 }

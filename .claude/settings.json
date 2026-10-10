@@ -45,6 +45,7 @@
     "token-optimizer@alexgreensh-token-optimizer": true
   },
   "env": {
-    "TOKEN_OPTIMIZER_BASH_COMPRESS": "0"
+    "TOKEN_OPTIMIZER_BASH_COMPRESS": "0",
+    "TOKEN_OPTIMIZER_STATUS_BAR": "0"
   }
 }

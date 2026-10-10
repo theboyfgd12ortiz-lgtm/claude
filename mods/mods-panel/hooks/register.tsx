@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { ElementConstructor, EngineInterface, Register, SvgProps } from 'claude-code'
 
-import type { FeedItem, Live, PanelExtras, RtkInfo, Tab, Tone } from '../types'
+import type { FeedItem, HealthCheck, Live, PanelExtras, RtkInfo, Tab, Tone } from '../types'
 import {
   bar,
   CHART_COLORS,
@@ -13,6 +13,9 @@ import {
   LADDER,
   parseRtk,
   percent,
+  personText,
+  resetLabel,
+  usageColor,
   planAdd,
   planFromTodos,
   planUpdate,
@@ -53,6 +56,8 @@ const plan = atom({ plugin: 'mods-panel', key: 'plan' } as const, [])
 const IDLE: Live = { isWorking: false, startedAt: 0, prompt: '', tools: 0, running: null }
 const live = atom({ plugin: 'mods-panel', key: 'live' } as const, IDLE)
 const history = atom({ plugin: 'mods-panel', key: 'history' } as const, [])
+const health = atom({ plugin: 'mods-panel', key: 'health' } as const, null)
+const asked = atom({ plugin: 'mods-panel', key: 'asked' } as const, null)
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'ahora', label: 'Ahora' },
@@ -144,6 +149,37 @@ const refresh = async ($: EngineInterface) => {
   await update($, extras, x => ({ rtk, plugins, rtkAtStart: x.rtkAtStart ?? rtk?.saved ?? null }) satisfies PanelExtras)
 }
 
+/** Runs a program's version check; the first line it prints, or null when it is missing. */
+const version = async ($: EngineInterface, argv: string[]): Promise<string | null> => {
+  try {
+    const r = await $.process.run(argv, { timeoutMs: 5000 })
+    const line = `${r.stdout}${r.stderr}`.trim().split('\n')[0] ?? ''
+
+    return r.exitCode === 0 && line !== '' ? line.slice(0, 40) : null
+  } catch {
+    return null
+  }
+}
+
+/** Checks what the mods need on this machine and writes the result for the Mods tab. */
+const checkHealth = async ($: EngineInterface) => {
+  const rtk = (await readRtk($))?.version ?? null
+  const jq = await version($, ['jq', '--version'])
+  const python = (await version($, ['python3', '--version'])) ?? (await version($, ['python', '--version']))
+  const node = await version($, ['node', '--version'])
+  const bash = await version($, ['bash', '--version'])
+  const checks: HealthCheck[] = [
+    { name: 'rtk', isOk: rtk !== null, detail: rtk ?? 'no encontrado', why: 'acorta git, ls, grep y tests (Windows: winget install rtk-ai.rtk)' },
+    { name: 'jq', isOk: jq !== null, detail: jq ?? 'no encontrado', why: 'lo necesita el puente de rtk (Windows: winget install jqlang.jq)' },
+    { name: 'bash', isOk: bash !== null, detail: bash === null ? 'no encontrado' : 'ok', why: 'corre los hooks (en Windows viene con Git for Windows)' },
+    { name: 'Python', isOk: python !== null, detail: python ?? 'no encontrado', why: 'lo necesita Token Optimizer (python.org)' },
+    { name: 'Node.js', isOk: node !== null, detail: node ?? 'no encontrado', why: 'lo necesitan caveman y ponytail (nodejs.org)' },
+  ]
+  await update($, health, () => checks)
+  const bad = checks.filter(c => !c.isOk)
+  await note($, bad.length === 0 ? '🩺' : '⚠', bad.length === 0 ? 'Revisión: todo instalado y funcionando' : `Revisión: falta ${bad.map(c => c.name).join(', ')}`, bad.length === 0 ? 'ok' : 'warn')
+}
+
 /** Opens the pane on a tab. */
 const openOn = async ($: EngineInterface, which: Tab | undefined) => {
   if (which !== undefined) await update($, tab, () => which)
@@ -213,12 +249,27 @@ export const register: Register = on => {
     return { text: opened.isPlaced ? 'Centro de control abierto.' : await summary($) }
   })
 
+  // ── What the person typed, before other plugins and settings hooks add their context ──
+  on('prompt.submit', async ($, e, next) => {
+    const kind = (e.origin as { kind?: string } | undefined)?.kind
+    const isPerson = kind === undefined || ['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified'].includes(kind)
+    const text = personText(e.text)
+    if (isPerson && text !== '' && !text.startsWith('/')) {
+      const at = await $.clock.now()
+      await update($, asked, () => ({ at, text: text.slice(0, 160) }))
+    }
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   // ── A turn begins: what was asked and which model the selector chose ──
   on('turn.start', async ($, e, next) => {
     const at = await $.clock.now()
-    const asked = e.text.replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, '').trim()
-    await update($, live, () => ({ isWorking: true, startedAt: at, prompt: asked.slice(0, 120), tools: 0, running: null }))
-    if (asked !== '') await note($, '💬', `Pediste: ${asked.replace(/\s+/g, ' ').slice(0, 70)}`)
+    const said = await read($, asked)
+    const words = said !== null && at - said.at < 120_000 ? said.text : ''
+    await update($, asked, () => null)
+    await update($, live, () => ({ isWorking: true, startedAt: at, prompt: words.slice(0, 120), tools: 0, running: null }))
+    if (words !== '') await note($, '💬', `Pediste: ${words.slice(0, 70)}`)
 
     const choice = ((await $.state.get(selHistorial)).value ?? []).at(-1)
     if (choice !== undefined && at - choice.hora < 60_000) {
@@ -349,8 +400,35 @@ export const register: Register = on => {
     )
 
     // ── Header: three facts at a glance, then the tabs ──
+    // Context and plan limits: what the Token Optimizer band showed below the prompt, here instead.
+    const usage = await $.session.usage().catch(() => null)
+    const limit = (kind: string) => usage?.rateLimits.find(r => r.kind === kind)
+    const fiveHour = limit('five_hour')
+    const week = limit('seven_day')
+    const contextPct = usage?.context.percent
+
     const header = (
       <Box flexDirection="column">
+        {(contextPct !== undefined || fiveHour !== undefined || week !== undefined) && (
+          <Box flexDirection="row" columnGap={2} flexWrap="wrap">
+            {contextPct !== undefined && (
+              <Text>
+                <Text dimColor>contexto</Text> <Text color={usageColor(contextPct)}>{Math.round(contextPct)}%</Text>
+              </Text>
+            )}
+            {fiveHour !== undefined && (
+              <Text>
+                <Text dimColor>5 horas</Text> <Text color={usageColor(fiveHour.percentUsed)}>{Math.round(fiveHour.percentUsed)}%</Text>
+              </Text>
+            )}
+            {week !== undefined && (
+              <Text>
+                <Text dimColor>semana</Text> <Text color={usageColor(week.percentUsed)} bold={week.percentUsed >= 90}>{Math.round(week.percentUsed)}%</Text>
+                {week.percentUsed >= 70 && resetLabel(week.resetsAt) !== '' && <Text dimColor> · se renueva {resetLabel(week.resetsAt)}</Text>}
+              </Text>
+            )}
+          </Box>
+        )}
         <Box flexDirection="row" columnGap={2} flexWrap="wrap">
           {hasSelector && (
             <Text>
@@ -627,8 +705,20 @@ export const register: Register = on => {
         })),
       ]
       const active = rows.filter(r => r.on).length
+      const checks = await read($, health)
       body = (
         <Box flexDirection="column">
+          <Section title="¿FUNCIONA TODO?">
+            {checks === null && <Text dimColor>Pulsa el botón y reviso lo que los mods necesitan en esta máquina.</Text>}
+            {checks?.map(c => (
+              <Text wrap="wrap">
+                <Text color={c.isOk ? 'success' : 'error'}>{c.isOk ? '✓' : '✕'}</Text> <Text bold>{c.name}</Text> <Text dimColor>{c.isOk ? c.detail : c.why}</Text>
+              </Text>
+            ))}
+            <Box marginTop={1}>
+              <Button key="health" label={checks === null ? 'Revisar instalación' : 'Revisar otra vez'} onPress={() => checkHealth($)} />
+            </Box>
+          </Section>
           <Section title={`MODS  ${active}/${rows.length} activos`}>
             {rows.map(r => (
               <Box key={`row-${r.key}`} flexDirection="column" marginTop={1}>

@@ -170,3 +170,24 @@ export const step = (n: number) => LADDER[Math.min(9, Math.max(1, Math.round(n))
 
 export const familyColor = (model: string): string =>
   model === 'Haiku' ? 'success' : model === 'Sonnet' ? 'suggestion' : 'claude'
+
+const DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+
+/** "mié 1:00" for an ISO time; '' when there is none. */
+export const resetLabel = (iso: string | undefined): string => {
+  if (iso === undefined) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+
+  return `${DAYS[d.getDay()]} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** Colour for a usage percentage: green, then yellow from 70, red from 90. */
+export const usageColor = (pct: number): string => (pct >= 90 ? 'error' : pct >= 70 ? 'warning' : 'success')
+
+/** The person's own words: the app's wrappers (<system-reminder> and the like) taken out. */
+export const personText = (text: string): string =>
+  text
+    .replace(/<(system-reminder|local-command-caveat|local-command-stdout|local-command-stderr|command-name|command-message|command-args)>[\s\S]*?<\/\1>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()

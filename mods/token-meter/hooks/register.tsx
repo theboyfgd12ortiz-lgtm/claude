@@ -8,7 +8,8 @@ const EMPTY: Totals = { turns: 0, input: 0, output: 0, cacheRead: 0, cacheWrite:
 const last = atom({ plugin: 'token-meter', key: 'last' } as const, null)
 const total = atom({ plugin: 'token-meter', key: 'total' } as const, EMPTY)
 const isActive = atom({ plugin: 'token-meter', key: 'isActive' } as const, false)
-const isHidden = atom({ plugin: 'token-meter', key: 'isHidden' } as const, false)
+// Off by default: the same numbers are in the Centro de control. /tokens show turns the band on.
+const isHidden = atom({ plugin: 'token-meter', key: 'isHidden' } as const, true)
 
 /** A turn reading this many input tokens or more earns a toast. */
 const HEAVY_TURN = 200_000

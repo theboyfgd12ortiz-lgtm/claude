@@ -52,16 +52,16 @@ ThirdParty 'SKIP_PONYTAIL' 'node' 'ponytail' 'DietrichGebert/ponytail' 'ponytail
 ThirdParty 'SKIP_TOKEN_OPTIMIZER' $Py 'alexgreensh-token-optimizer' 'alexgreensh/token-optimizer' 'token-optimizer@alexgreensh-token-optimizer'
 
 # rtk ya recorta los comandos de Bash: se apaga el recorte propio de token-optimizer para que no peleen.
-if ($env:SKIP_RTK -ne '1') {
-  $SettingsPath = Join-Path $HOME '.claude\settings.json'
-  try {
-    $data = if (Test-Path $SettingsPath) { Get-Content $SettingsPath -Raw | ConvertFrom-Json } else { [pscustomobject]@{} }
-    if (-not $data.PSObject.Properties['env']) { $data | Add-Member -NotePropertyName env -NotePropertyValue ([pscustomobject]@{}) }
-    $data.env | Add-Member -NotePropertyName TOKEN_OPTIMIZER_BASH_COMPRESS -NotePropertyValue '0' -Force
-    # UTF-8 sin BOM: con BOM Claude Code no puede leer el archivo.
-    [System.IO.File]::WriteAllText($SettingsPath, ($data | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false))
-  } catch { Warn "no pude ajustar $SettingsPath" }
-}
+# Su barra de abajo también se apaga: lo mismo se ve en el Centro de control, en un solo lugar.
+$SettingsPath = Join-Path $HOME '.claude\settings.json'
+try {
+  $data = if (Test-Path $SettingsPath) { Get-Content $SettingsPath -Raw | ConvertFrom-Json } else { [pscustomobject]@{} }
+  if (-not $data.PSObject.Properties['env']) { $data | Add-Member -NotePropertyName env -NotePropertyValue ([pscustomobject]@{}) }
+  if ($env:SKIP_RTK -ne '1') { $data.env | Add-Member -NotePropertyName TOKEN_OPTIMIZER_BASH_COMPRESS -NotePropertyValue '0' -Force }
+  $data.env | Add-Member -NotePropertyName TOKEN_OPTIMIZER_STATUS_BAR -NotePropertyValue '0' -Force
+  # UTF-8 sin BOM: con BOM Claude Code no puede leer el archivo.
+  [System.IO.File]::WriteAllText($SettingsPath, ($data | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false))
+} catch { Warn "no pude ajustar $SettingsPath" }
 
 # --- Actualización automática: lo mismo que /plugin → Marketplaces → Enable auto-update ---
 $Known = Join-Path $HOME '.claude\plugins\known_marketplaces.json'

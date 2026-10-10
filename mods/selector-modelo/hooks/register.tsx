@@ -296,6 +296,9 @@ export const register: Register = on => {
     if (Number.isFinite(guardado) && guardado >= 1) await update($, tope, () => limitar(guardado, 1, NIVEL_MAX))
     const r = await next(e)
     await mostrar($)
+    // Con el Centro de control instalado, este panel sobra: si la app lo dejó abierto, se cierra.
+    const comandos = await $.command.list().catch(() => [])
+    if (comandos.some(c => c.name === 'mods')) await $.ui.close({ id: PANEL }).catch(() => undefined)
     return r
   })
 

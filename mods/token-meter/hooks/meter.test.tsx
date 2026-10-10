@@ -34,6 +34,9 @@ test('draws the band once a turn was measured', async ($, on) => {
     usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 900, cache_creation_input_tokens: 0, model: 'm' },
   } as never)
 
+  // The band starts hidden (the Centro de control shows the same); /tokens show turns it on.
+  await $.command.run({ command: 'tokens', args: 'show', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as never)
+
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'token-meter', surface, component: 'AbovePrompt', props: { hasSurvey: false } as never })
     expect(await ui.find({ type: 'Text', text: /Último turno: 1.0k entrada \(90% caché\)/ })).toBeDefined()

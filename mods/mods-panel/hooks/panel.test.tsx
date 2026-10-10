@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { chartSvg, describeTool, parseRtk, percent, planAdd, planFromTodos, planUpdate, short } from './model'
+import { chartSvg, describeTool, parseRtk, percent, personText, planAdd, planFromTodos, planUpdate, resetLabel, short, usageColor } from './model'
 
 const PANE = {
   component: 'Pane',
@@ -40,6 +40,15 @@ describe('model', () => {
     plan = planUpdate(plan, '1', { status: 'completed' })
     plan = planUpdate(plan, '2', { status: 'deleted' })
     expect(plan).toEqual([{ id: '1', text: 'Primero', status: 'completed' }])
+  })
+
+  test('limits and words', () => {
+    expect(usageColor(98)).toBe('error')
+    expect(usageColor(75)).toBe('warning')
+    expect(usageColor(20)).toBe('success')
+    expect(resetLabel(undefined)).toBe('')
+    expect(resetLabel('2026-10-14T01:00:00')).toBe('mié 1:00')
+    expect(personText('<system-reminder>x</system-reminder>\n hola  ')).toBe('hola')
   })
 
   test('draws one stacked bar per turn', () => {
@@ -88,8 +97,11 @@ test('a turn shows up as activity, plan and cost', async ($, on) => {
   on('tool.call', { tool: 'Read' }, () => ({ result: { type: 'text', file: { filePath: '/r/app.ts', content: 'x', numLines: 1, startLine: 1, totalLines: 1 } } }) as never)
   on('tool.call', { tool: 'TodoWrite' }, () => ({ result: { oldTodos: [], newTodos: [] } }) as never)
   on('turn.complete', () => ({ text: 'ok' }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }) as never)
 
-  await $.turn.start({ text: 'arregla el login', turnId: 't1' } as never)
+  // The person's words come from prompt.submit; turn.start's text carries context others added.
+  await $.prompt.submit({ text: '<system-reminder>aviso</system-reminder>arregla el login', wait: false, origin: { kind: 'composer' } } as never)
+  await $.turn.start({ text: 'If the request needs no existing project...', turnId: 't1' } as never)
   await $.tool.call({
     tool: 'TodoWrite',
     todos: [
@@ -109,6 +121,7 @@ test('a turn shows up as activity, plan and cost', async ($, on) => {
 
   const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
   expect(await ui.find({ type: 'Text', text: /Pediste: arregla el login/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /If the request/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Leyendo app.ts/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /PLAN {2}1\/2/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Respuesta lista .* 1.0k leídos \(80% caché\)/ })).toBeDefined()
@@ -123,4 +136,22 @@ test('/mods answers with a text summary where no pane can be drawn', async ($, o
   expect(out.text).toMatch(/Centro de control/)
   expect(out.text).toMatch(/Guardián: protegiendo/)
   expect(out.text).toMatch(/Plugins activos: guardian/)
+})
+
+test('the install check reports what is missing', async ($, on) => {
+  mock.clock(on)
+  const done = { stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+  on('process.run', (_$, e) => {
+    const cmd = e.argv.join(' ')
+    const has = /^(node|bash|python3) --version$/.test(cmd)
+
+    return { value: has ? { ...done, exitCode: 0, stdout: `${e.argv[0]} 1.0\n` } : { ...done, exitCode: 127, stdout: '' } }
+  })
+  on('command.list', () => ({ value: [] }) as never)
+  const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'tab-mods' })
+  await ui.press({ key: 'health' })
+  expect(await ui.find({ type: 'Text', text: /✕ rtk/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✓ Node.js/ })).toBeDefined()
+  await ui.unmount()
 })

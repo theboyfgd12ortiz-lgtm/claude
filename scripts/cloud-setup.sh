@@ -73,6 +73,7 @@ if os.path.exists(path):
 env = data.setdefault("env", {})
 env["CLAUDE_CODE_PLUGIN_DIRS"] = dirs
 env["TOKEN_OPTIMIZER_BASH_COMPRESS"] = "0"
+env["TOKEN_OPTIMIZER_STATUS_BAR"] = "0"
 json.dump(data, open(path, "w"), indent=2)
 PYEOF
 else
