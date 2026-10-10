@@ -1,0 +1,6 @@
+{
+  "name": "memoria",
+  "description": "Claude recuerda tu proyecto: tras un trabajo importante apunta lo que vale la pena (cómo probarlo, cómo publicarlo, decisiones) en .claude/memoria.md y lo lee al empezar, para que no tengas que explicarlo otra vez.",
+  "author": { "name": "theboyfgd12ortiz-lgtm" },
+  "types": "./types/index.d.ts"
+}

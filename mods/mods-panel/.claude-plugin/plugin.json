@@ -14,7 +14,8 @@
     "traspaso",
     "mejorar-prompt",
     "respaldo",
-    "web"
+    "web",
+    "memoria"
   ],
   "types": "./types/index.d.ts"
 }

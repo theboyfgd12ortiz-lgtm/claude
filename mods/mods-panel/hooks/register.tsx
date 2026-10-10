@@ -66,6 +66,9 @@ const changes = atom({ plugin: 'mods-panel', key: 'changes' } as const, [])
 const shown = atom({ plugin: 'mods-panel', key: 'shown' } as const, null)
 const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
 const presupuestoAuto = { plugin: 'presupuesto', key: 'isAuto' } as const
+const memoriaNotas = { plugin: 'memoria', key: 'notas' } as const
+const memoriaCuando = { plugin: 'memoria', key: 'at' } as const
+const memoriaAuto = { plugin: 'memoria', key: 'isAuto' } as const
 const webInforme = { plugin: 'web', key: 'informe' } as const
 const webServicios = { plugin: 'web', key: 'servicios' } as const
 const webUrls = { plugin: 'web', key: 'urls' } as const
@@ -938,6 +941,16 @@ export const register: Register = on => {
           action: { label: 'Reiniciar', press: () => $.command.run({ command: 'tokens', args: 'reset' }) },
         },
         {
+          key: 'memoria',
+          on: x.plugins.includes('memoria') && ((await $.state.get(memoriaAuto)).value ?? true),
+          name: 'Memoria del proyecto',
+          what: 'Apunta solo lo importante de cada proyecto (cómo probarlo, publicarlo, decisiones) y lo recuerda en la próxima charla.',
+          stat: !x.plugins.includes('memoria')
+            ? 'no instalado'
+            : `${(await $.state.get(memoriaNotas)).value ?? 0} notas${((await $.state.get(memoriaCuando)).value ?? 0) > 0 ? ` · actualizada ${hace((await $.state.get(memoriaCuando)).value ?? now, now)}` : ''}`,
+          action: x.plugins.includes('memoria') ? { label: 'Actualizar ahora', press: () => $.command.run({ command: 'memoria', args: 'actualizar' }) } : undefined,
+        },
+        {
           key: 'web',
           on: x.plugins.includes('web'),
           name: 'Web',
@@ -1042,6 +1055,7 @@ export const register: Register = on => {
             <Text>/mejorar &lt;pedido&gt; · pedidos claros</Text>
             <Text>/respaldo · puntos de restauración (el botón Deshacer está en Cambios)</Text>
             <Text>/sitio &lt;dirección&gt; · revisar una página (todo está en la pestaña Web)</Text>
+            <Text>/memoria · lo que Claude recuerda del proyecto · borrar</Text>
             <Text>/tokens · gasto de la sesión</Text>
             <Text>/caveman · stop caveman · respuestas cortas</Text>
             <Text>/ponytail off · soluciones mínimas</Text>

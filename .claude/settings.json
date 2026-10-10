@@ -47,7 +47,8 @@
     "traspaso@claude-mods": true,
     "mejorar-prompt@claude-mods": true,
     "respaldo@claude-mods": true,
-    "web@claude-mods": true
+    "web@claude-mods": true,
+    "memoria@claude-mods": true
   },
   "env": {
     "TOKEN_OPTIMIZER_BASH_COMPRESS": "0",

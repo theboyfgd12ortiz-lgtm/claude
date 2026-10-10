@@ -61,6 +61,11 @@
       "description": "Revisa páginas web en palabras simples, avisa si GitHub/Netlify/Supabase/Claude están caídos y revisa solo tu sitio al publicarlo."
     },
     {
+      "name": "memoria",
+      "source": "./mods/memoria",
+      "description": "Claude recuerda tu proyecto entre conversaciones: apunta solo lo importante y lo lee al empezar."
+    },
+    {
       "name": "mods-panel",
       "source": "./mods/mods-panel",
       "description": "Panel /mods: explica cada mod en español y muestra su estado en vivo."
