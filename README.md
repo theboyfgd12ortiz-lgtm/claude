@@ -12,18 +12,45 @@ protegen tu trabajo, ahorran tokens y empujan a Claude a entregar resultados ver
 
 ## Instalar
 
-En una sesión de Claude Code en la terminal:
+### En tu PC (local)
+
+Linux, macOS o WSL:
 
 ```
-/plugin install guardian --marketplace theboyfgd12ortiz-lgtm/claude
-/plugin install output-trim --marketplace theboyfgd12ortiz-lgtm/claude
-/plugin install quality-coach --marketplace theboyfgd12ortiz-lgtm/claude
-/plugin install token-meter --marketplace theboyfgd12ortiz-lgtm/claude
+git clone https://github.com/theboyfgd12ortiz-lgtm/claude.git
+bash claude/scripts/install-mods.sh
 ```
 
-Responde `y` para añadir el marketplace y elige el alcance (usuario recomendado).
+Windows (PowerShell):
 
-Para probarlos sin instalarlos: `claude --plugin-dir mods/guardian --plugin-dir mods/output-trim ...`
+```
+git clone https://github.com/theboyfgd12ortiz-lgtm/claude.git
+powershell -ExecutionPolicy Bypass -File claude\scripts\install-mods.ps1
+```
+
+El script instala **todos** los mods del marketplace a nivel usuario, así que funcionan en cualquier proyecto. Si lo vuelves a correr, actualiza los que ya tengas.
+
+También puedes instalar uno por uno desde la terminal de Claude Code:
+`/plugin install guardian --marketplace theboyfgd12ortiz-lgtm/claude`
+
+### En la nube (claude.ai/code)
+
+- **Para todas tus sesiones en la nube:** en el entorno (menú del entorno, luego *Edit*, luego *Setup script*) pega:
+
+  ```
+  git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/claude-mods && bash /tmp/claude-mods/scripts/install-mods.sh
+  ```
+
+  Cada sesión nueva arranca con los mods instalados y al día.
+- **Solo en este repo:** `.claude/settings.json` ya declara el marketplace y activa los mods, así que cualquier sesión (local o en la nube) que abra este repo los carga.
+
+### Añadir un mod nuevo (o uno que ya tengas en local)
+
+1. Copia su carpeta a `mods/<nombre>/`. Debe tener `.claude-plugin/plugin.json`, cuyo `name` sea igual a `<nombre>`, y `hooks/`.
+2. Añádelo a `.claude-plugin/marketplace.json` con `"source": "./mods/<nombre>"`, y a `enabledPlugins` en `.claude/settings.json`.
+3. Haz commit y push. Al volver a correr el script, local y nube lo reciben.
+
+Cuando cambies un mod, **sube su `version`** en `plugin.json`. Si no, `claude plugin update` lo considera al día y no trae los cambios.
 
 ## Comandos
 

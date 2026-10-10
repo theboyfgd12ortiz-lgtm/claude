@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "claude-mods": {
+      "source": { "source": "github", "repo": "theboyfgd12ortiz-lgtm/claude" }
+    }
+  },
+  "enabledPlugins": {
+    "guardian@claude-mods": true,
+    "output-trim@claude-mods": true,
+    "quality-coach@claude-mods": true,
+    "token-meter@claude-mods": true
+  }
+}
