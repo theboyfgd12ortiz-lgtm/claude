@@ -2,18 +2,25 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Aprendizaje, Investigacion, Registro } from '../types'
-import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, pistaDeEquipo, PIZARRA, sumarEntrada } from './contexto'
-import { aprender, esBueno, lecciones, modeloAprendido } from './aprende'
-import { AGENTES, ahorro, costo, familiaDe, GUIA, modeloParaAgente, slug } from './reglas'
+import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, leerPlan, pistaDeEquipo, PIZARRA, PLAN, sumarEntrada } from './contexto'
+import { aprender, esBueno, lecciones } from './aprende'
+import { AGENTES, ahorro, costo, dificultadDe, familiaDe, GUIA, modeloParaAgente, slug } from './reglas'
 
 const agentes = atom({ plugin: 'equipo', key: 'agentes' } as const, [])
 const investigacion = atom({ plugin: 'equipo', key: 'investigacion' } as const, null)
 const isAuto = atom({ plugin: 'equipo', key: 'isAuto' } as const, true)
 const aprendizaje = atom({ plugin: 'equipo', key: 'aprendizaje' } as const, {})
+const plan = atom({ plugin: 'equipo', key: 'plan' } as const, null)
 const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
 
 /** De dónde vienen los mensajes de la persona. */
 const PERSONA = new Set(['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified'])
+
+/** Agentes a la vez y por turno: más que eso casi siempre gasta más de lo que ahorra. */
+const MAX_PARALELO = 3
+const MAX_TURNO = 6
+/** Un agente "trabajando" desde hace más de esto se da por colgado y no cuenta. */
+const COLGADO_MS = 15 * 60 * 1000
 
 /** Cuántos agentes se recuerdan para el panel. */
 const MAX = 40
@@ -57,6 +64,10 @@ const guardar = async ($: EngineInterface, i: Investigacion): Promise<string> =>
 }
 
 export const register: Register = on => {
+  // Lanzamientos en vuelo y en lo que va del turno del director (se cuentan sin esperar, para que los paralelos no se cuelen).
+  let reservas = 0
+  let lanzadosEnTurno = 0
+
   // Agente de la autoprueba en curso.
   let pruebaId: string | undefined
 
@@ -89,7 +100,9 @@ export const register: Register = on => {
     const tope = (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax
     if (tope !== undefined && tope !== null) return next(e)
     const usage = await $.session.usage().catch(() => null)
-    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0 })
+    const avance = await $.fs.read(PLAN).then(r => (typeof r === 'string' ? leerPlan(r) : null), () => null)
+    await update($, plan, () => avance)
+    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0, plan: avance })
 
     return next(pista === undefined ? e : { ...e, context: [...(e.context ?? []), pista] })
   }).catch(($, e, next) => next(e))
@@ -115,9 +128,31 @@ export const register: Register = on => {
     const objetivo =
       e.fork || e.isTeammate === true || e.workflow !== undefined || !(await read($, isAuto))
         ? undefined
-        : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: e.parentModel ?? '', fork: false, aprendido: modeloAprendido(await read($, aprendizaje), e.subagentType) })
-    const lanzado = await next(objetivo === undefined ? e : { ...e, model: objetivo })
-    if (lanzado.deny !== undefined || lanzado.agentId === undefined) return lanzado
+        : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: e.parentModel ?? '', fork: false, aprendido: (await read($, aprendizaje))[e.subagentType]?.nivel ?? undefined, dificultad: dificultadDe(e.description, e.prompt) })
+    const mide = !(e.fork || e.isTeammate === true || e.workflow !== undefined) && (await read($, isAuto))
+    if (mide) {
+      const ahora = await $.clock.now()
+      const activos = (await read($, agentes)).filter(r => r.estado === 'trabajando' && ahora - r.at < COLGADO_MS).length
+      if (activos + reservas >= MAX_PARALELO) return { deny: `Ya hay ${MAX_PARALELO} agentes trabajando a la vez. Espera a que termine alguno (o haz tú este paso) y vuelve a pedirlo.` }
+      if (lanzadosEnTurno >= MAX_TURNO) return { deny: `Ya se lanzaron ${MAX_TURNO} agentes en esta tarea: más cuesta más de lo que ahorra. Integra lo que tienes o haz tú el resto.` }
+      reservas += 1
+      lanzadosEnTurno += 1
+    }
+    let lanzado
+    try {
+      lanzado = await next(objetivo === undefined ? e : { ...e, model: objetivo })
+    } catch (error) {
+      if (mide) reservas -= 1
+      throw error
+    }
+    if (lanzado.deny !== undefined || lanzado.agentId === undefined) {
+      if (mide) {
+        reservas -= 1
+        lanzadosEnTurno -= 1
+      }
+
+      return lanzado
+    }
 
     const id = lanzado.agentId
     const reg: Registro = {
@@ -136,6 +171,7 @@ export const register: Register = on => {
       encargo: Math.ceil(e.prompt.length / 4),
     }
     await update($, agentes, l => [reg, ...l].slice(0, MAX))
+    if (mide) reservas -= 1
 
     return lanzado
   }).catch(($, e, next) => next(e))
@@ -146,6 +182,7 @@ export const register: Register = on => {
     const id = e.agentId
     if (id === undefined) {
       obreros = []
+      lanzadosEnTurno = 0
 
       return done
     }

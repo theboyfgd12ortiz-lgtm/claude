@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, PIZARRA_MAX, pistaDeEquipo, sumarEntrada } from './contexto'
+import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, leerPlan, PIZARRA_MAX, pistaDeEquipo, sumarEntrada } from './contexto'
 
 test('reconoce una tarea grande por tamaño, partes o palabras', () => {
   expect(esTareaGrande('arregla el botón del login')).toBe(false)
@@ -34,4 +34,12 @@ test('la pizarra guarda lo esencial y no pasa de su tope: se van las entradas m�
 
 test('al compactar se pide conservar el plan y la pizarra', () => {
   expect(AVISO_COMPACTAR).toMatch(/plan\.md.*pizarra\.md/)
+})
+
+test('lee el avance del plan por sus casillas', () => {
+  expect(leerPlan('sin casillas')).toBeNull()
+  const p = leerPlan('# Plan\n- [x] uno\n- [ ] dos\n2) [ ] tres')
+  expect(p).toEqual({ hechos: 1, total: 3, siguiente: 'dos' })
+  expect(leerPlan('- [x] a\n- [X] b')?.siguiente).toBeNull()
+  expect(pistaDeEquipo({ contexto: 0, grande: false, hayPizarra: false, plan: { hechos: 2, total: 2, siguiente: null } })).toBeUndefined()
 })

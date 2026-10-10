@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { ahorro, costo, familiaDe, modeloParaAgente, slug, AGENTES, GUIA } from './reglas'
+import { ahorro, costo, dificultadDe, familiaDe, modeloParaAgente, slug, AGENTES, GUIA } from './reglas'
 
 test('reconoce la familia del modelo', () => {
   expect(familiaDe('claude-haiku-5-5')).toBe('haiku')
@@ -103,6 +103,7 @@ test('el revisor que halla problemas castiga al obrero; TODO BIEN no', async ($,
     await $.turn.complete({ agentId: `a${n}`, reason: 'answer', answer: 'Cambié src/a.ts y corrí las pruebas: pasan.', usage: uso } as never)
     await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:revisor' } as never)
     await $.turn.complete({ agentId: `a${n}`, reason: 'answer', answer: veredicto, usage: uso } as never)
+    await $.turn.complete({ reason: 'answer', answer: 'listo', usage: uso } as never)
   }
   await ronda('TODO BIEN')
   await ronda('TODO BIEN')
@@ -155,4 +156,59 @@ test('lo que responde un agente queda en la pizarra', async ($, on) => {
   await $.agent.spawn(SPAWN as never)
   await $.turn.complete({ agentId: 'z1', reason: 'answer', answer: 'Está en src/login.ts:42', usage: { input_tokens: 5, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } as never)
   expect(escrito).toMatch(/# Pizarra del equipo[\s\S]*Está en src\/login\.ts:42/)
+})
+
+test('la dificultad que escribe el director ajusta el modelo, sin pisar lo aprendido', () => {
+  const base = { pedido: undefined, padre: 'claude-opus-5-5', fork: false }
+  expect(dificultadDe('buscar login. dificultad: alta', '')).toBe('alta')
+  expect(dificultadDe('x', 'Dificultad = fácil\nhaz esto')).toBe('baja')
+  expect(dificultadDe('x', 'sin etiqueta')).toBeUndefined()
+  expect(modeloParaAgente({ ...base, tipo: 'equipo:obrero', dificultad: 'alta' })).toBe('opus')
+  expect(modeloParaAgente({ ...base, tipo: 'equipo:obrero', dificultad: 'baja' })).toBe('haiku')
+  expect(modeloParaAgente({ ...base, tipo: 'equipo:explorador', dificultad: 'alta' })).toBe('sonnet')
+  // Si el equipo ya lo subió por fallos, "baja" no lo vuelve a bajar.
+  expect(modeloParaAgente({ ...base, tipo: 'equipo:explorador', aprendido: 'sonnet', dificultad: 'baja' })).toBe('sonnet')
+  // Nunca más caro que el director.
+  expect(modeloParaAgente({ ...base, tipo: 'equipo:obrero', padre: 'claude-sonnet-5-5', dificultad: 'alta' })).toBe('claude-sonnet-5-5')
+})
+
+test('máximo 3 agentes a la vez: el cuarto se rechaza con un mensaje claro', async ($, on) => {
+  on('clock.now', () => ({ value: 1000 }) as never)
+  let n = 0
+  on('agent.spawn', (_$, e) => ({ model: e.model ?? 'opus', agentId: `q${++n}` }) as never)
+  const resultados = []
+  for (let i = 0; i < 4; i++) resultados.push(await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:explorador' } as never))
+  expect(resultados.slice(0, 3).every(r => r.deny === undefined)).toBe(true)
+  expect(resultados[3]?.deny).toMatch(/3 agentes trabajando a la vez/)
+})
+
+test('máximo 6 agentes por tarea; al terminar el turno del director se reinicia la cuenta', async ($, on) => {
+  on('clock.now', () => ({ value: 1000 }) as never)
+  on('turn.complete', () => ({ text: '' }) as never)
+  let n = 0
+  on('agent.spawn', (_$, e) => ({ model: e.model ?? 'opus', agentId: `w${++n}` }) as never)
+  const uso = { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+  const uno = async () => {
+    const r = await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:explorador' } as never)
+    if (r.deny === undefined) await $.turn.complete({ agentId: `w${n}`, reason: 'answer', answer: 'src/a.ts:1', usage: uso } as never)
+
+    return r
+  }
+  for (let i = 0; i < 6; i++) expect((await uno()).deny).toBeUndefined()
+  expect((await uno()).deny).toMatch(/6 agentes/)
+  await $.turn.complete({ reason: 'answer', answer: 'ok', usage: uso } as never)
+  expect((await uno()).deny).toBeUndefined()
+})
+
+test('el plan en curso viaja con el mensaje: cuántos pasos van y cuál sigue', async ($, on) => {
+  let visto: readonly string[] | undefined
+  on('prompt.submit', (_$, e) => {
+    visto = e.context
+
+    return { text: e.text, context: e.context } as never
+  })
+  on('session.usage', () => ({ value: { context: { percent: 5 } } }) as never)
+  on('fs.read', () => ({ value: '# Plan\n- [x] leer el login\n- [x] cambiar el botón\n- [ ] probar en móvil\n- [ ] publicar' }) as never)
+  await $.prompt.submit({ text: 'sigue', wait: false, origin: { kind: 'composer' } } as never)
+  expect(visto?.join(' ')).toMatch(/2 de 4 pasos hechos\. Sigue: probar en móvil/)
 })

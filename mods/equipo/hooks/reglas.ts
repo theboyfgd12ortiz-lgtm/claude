@@ -43,6 +43,26 @@ export const MODELO_POR_TIPO: Record<string, 'haiku' | 'sonnet'> = {
   Explore: 'haiku',
 }
 
+export type Dificultad = 'baja' | 'media' | 'alta'
+const NIVELES = ['haiku', 'sonnet', 'opus'] as const
+
+/** La dificultad que el director escribió en el encargo ("dificultad: alta"), o undefined si no dijo. */
+export const dificultadDe = (descripcion: string, prompt: string): Dificultad | undefined => {
+  const m = /dificultad\s*[:=]\s*(baja|media|alta|f[aá]cil|dif[ií]cil)/i.exec(`${descripcion}\n${prompt.slice(0, 300)}`)
+  const d = m?.[1]?.toLowerCase()
+  if (d === undefined) return undefined
+
+  return d === 'baja' || d.startsWith('f') ? 'baja' : d === 'media' ? 'media' : 'alta'
+}
+
+/** Alta sube un escalón; baja lo deja en Haiku, pero solo si el equipo no lo había subido por sus fallos (no se pisa lo aprendido). */
+export const nivelPorDificultad = (base: 'haiku' | 'sonnet' | 'opus', dificultad: Dificultad | undefined, sinAprender: boolean): 'haiku' | 'sonnet' | 'opus' => {
+  if (dificultad === 'alta') return NIVELES[Math.min(2, NIVELES.indexOf(base) + 1)] ?? base
+  if (dificultad === 'baja' && sinAprender) return 'haiku'
+
+  return base
+}
+
 /**
  * El modelo que se pone a un subagente que no trae uno, o undefined si no hay que tocar nada:
  * quien lo lanza ya eligió, es una bifurcación, no hay regla, o el director ya es igual de barato.
@@ -54,10 +74,13 @@ export const modeloParaAgente = (a: {
   fork: boolean
   /** Lo que el equipo aprendió para este tipo; si falta, vale el de siempre. */
   aprendido?: 'haiku' | 'sonnet' | 'opus' | undefined
+  /** Lo que el director dijo de este encargo: más fácil o más difícil de lo normal. */
+  dificultad?: Dificultad | undefined
 }): string | undefined => {
   if (a.fork || (a.pedido !== undefined && a.pedido !== '')) return undefined
-  const objetivo: 'haiku' | 'sonnet' | 'opus' | undefined = a.aprendido ?? MODELO_POR_TIPO[a.tipo]
-  if (objetivo === undefined) return undefined
+  const base: 'haiku' | 'sonnet' | 'opus' | undefined = a.aprendido ?? MODELO_POR_TIPO[a.tipo]
+  if (base === undefined) return undefined
+  const objetivo = nivelPorDificultad(base, a.dificultad, a.aprendido === undefined)
   const rangoPadre = RANGO[familiaDe(a.padre)]
   // Un agente del equipo trae su propio modelo fijo: se pone siempre, y nunca más caro que el director.
   if (a.tipo.startsWith('equipo:')) return rangoPadre < RANGO[objetivo] ? a.padre : objetivo
@@ -133,8 +156,9 @@ Tú diriges (si la tarea es grande, planifica antes en pasos cortos). Para traba
 - equipo:obrero (Sonnet): hacer UN paso claro. Dale una especificación completa y autosuficiente (archivos, qué cambiar, cuándo está listo): no ve esta conversación.
 - equipo:revisor (Sonnet): solo si cambiaste 3 o más archivos de código; en cambios pequeños revisa tú.
 2. Lanza en paralelo lo independiente (varias llamadas Agent en el mismo mensaje).
-3. Pide respuestas cortas. Integra sus resultados; no repitas su trabajo ni releas lo que ya resumieron.
-4. Como mucho 4 agentes por tarea. Si dudas de que valga la pena delegar, hazlo tú.`
+3. En la descripción de cada encargo escribe "dificultad: baja", "media" o "alta": el equipo ajusta el modelo (baja = más barato, alta = un escalón más fuerte). Pon primero lo que bloquea a los demás pasos.
+4. Pide respuestas cortas. Integra sus resultados; no repitas su trabajo ni releas lo que ya resumieron.
+5. Como mucho 3 agentes a la vez y 6 por tarea (el sistema rechaza el resto). Si dudas de que valga la pena delegar, hazlo tú.`
 
 export const slug = (texto: string): string =>
   texto

@@ -48,10 +48,13 @@ export type Ruta = {
   neto: number
 }
 
+/** Avance del plan que el director escribió en .claude/equipo/plan.md. */
+export type AvancePlan = { hechos: number; total: number; siguiente: string | null }
+
 export type Aprendizaje = Record<string, Ruta>
 
 declare module 'claude-code' {
   interface PluginState {
-    equipo: { agentes: Registro[]; investigacion: Investigacion | null; isAuto: boolean; aprendizaje: Aprendizaje }
+    equipo: { agentes: Registro[]; investigacion: Investigacion | null; isAuto: boolean; aprendizaje: Aprendizaje; plan: AvancePlan | null }
   }
 }
