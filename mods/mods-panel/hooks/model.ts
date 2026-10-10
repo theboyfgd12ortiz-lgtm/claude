@@ -225,13 +225,17 @@ export const hace = (desde: number, ahora: number): string => {
 
 // ── Equipo ──
 const PRECIO_EQUIPO = { haiku: 1, sonnet: 3, opus: 5, otro: 3 } as const
-type Trabajo = { nuevo: number; cache: number; escrito: number; familia: keyof typeof PRECIO_EQUIPO; padre: keyof typeof PRECIO_EQUIPO }
+type Trabajo = { nuevo: number; cache: number; escrito: number; familia: keyof typeof PRECIO_EQUIPO; padre: keyof typeof PRECIO_EQUIPO; encargo?: number; respuesta?: number }
 const unidades = (t: Pick<Trabajo, 'nuevo' | 'cache' | 'escrito'>, f: keyof typeof PRECIO_EQUIPO): number => (t.nuevo + t.cache * 0.1 + t.escrito * 5) * PRECIO_EQUIPO[f]
 
-/** Lo que gastaron los agentes y lo que habría costado con el modelo del director (estimación, en unidades relativas). */
+/**
+ * Lo que gastaron los agentes frente a lo que habría costado con el modelo del director (estimación, en unidades relativas).
+ * El gasto incluye lo que cuesta delegar: el encargo que escribe el director y la respuesta que lee. Puede salir negativo.
+ */
 export const equipoCostos = (lista: readonly Trabajo[]): { gastado: number; habria: number; ahorro: number; porcentaje: number } => {
-  const gastado = lista.reduce((s, t) => s + unidades(t, t.familia), 0)
-  const habria = lista.reduce((s, t) => s + Math.max(unidades(t, t.padre === 'otro' ? 'opus' : t.padre), unidades(t, t.familia)), 0)
+  const dir = (t: Trabajo) => (t.padre === 'otro' ? 'opus' : t.padre)
+  const gastado = lista.reduce((s, t) => s + unidades(t, t.familia) + ((t.encargo ?? 0) * 5 + (t.respuesta ?? 0)) * PRECIO_EQUIPO[dir(t)], 0)
+  const habria = lista.reduce((s, t) => s + unidades(t, dir(t)), 0)
 
   return { gastado, habria, ahorro: habria - gastado, porcentaje: habria === 0 ? 0 : Math.round(((habria - gastado) / habria) * 100) }
 }

@@ -16,6 +16,9 @@ export type Registro = {
   nuevo: number
   cache: number
   escrito: number
+  /** Tokens estimados (caracteres/4) de lo que el director le encargó y de lo que le respondió: delegar también cuesta. */
+  encargo?: number
+  respuesta?: number
 }
 
 export type Investigacion = {
@@ -31,7 +34,7 @@ export type Investigacion = {
 /** Lo que el equipo aprendió de un tipo de agente. */
 export type Ruta = {
   /** Modelo que se le pone ahora, si el equipo decidió cambiarlo; vacío = el de siempre. */
-  nivel: 'haiku' | 'sonnet' | null
+  nivel: 'haiku' | 'sonnet' | 'opus' | null
   /** Últimos resultados con el modelo actual: true = bien. */
   recientes: boolean[]
   /** Aciertos seguidos desde el último cambio. */
@@ -41,6 +44,8 @@ export type Ruta = {
   unidades: number
   /** Cuántas veces el equipo lo subió de nivel. */
   subidas: number
+  /** Ahorro neto acumulado (unidades), ya descontado el costo de delegar. */
+  neto: number
 }
 
 export type Aprendizaje = Record<string, Ruta>

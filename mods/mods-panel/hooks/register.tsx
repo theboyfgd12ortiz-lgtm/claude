@@ -823,6 +823,7 @@ export const register: Register = on => {
             <Text wrap="wrap" dimColor>Claude dirige y reparte lo pesado (buscar, leer, investigar, revisar) a modelos más baratos. Aprende: si uno barato falla seguido, sube a Sonnet; si luego acierta mucho, vuelve a probar el barato.</Text>
             <Box flexDirection="row" columnGap={1} marginTop={1}>
               <Button key="eq-auto" label={autoEq ? 'Equipo: activo' : 'Equipo: apagado'} variant={autoEq ? 'primary' : 'secondary'} onPress={() => $.command.run({ command: 'equipo', args: autoEq ? 'off' : 'on' })} />
+              <Button key="eq-test" label="Probar que funciona" onPress={() => $.command.run({ command: 'equipo', args: 'probar' })} />
               <Button key="eq-forget" label="Olvidar lo aprendido" onPress={() => $.command.run({ command: 'equipo', args: 'olvidar' })} />
             </Box>
           </Section>
@@ -832,8 +833,10 @@ export const register: Register = on => {
               <Text dimColor>Aún no trabajó ningún agente. Cuando Claude reparta una tarea, aquí verás cuánto se ahorró.</Text>
             ) : (
               <Text wrap="wrap">
-                <Text bold color={costos.porcentaje >= 30 ? 'success' : 'warning'}>~{costos.porcentaje}% menos</Text>
-                <Text dimColor> que haciéndolo todo con el modelo principal · {lista.length} agentes · es una estimación con los precios relativos de cada modelo, no tu factura</Text>
+                <Text bold color={costos.porcentaje >= 30 ? 'success' : costos.porcentaje >= 0 ? 'warning' : 'error'}>
+                  {costos.porcentaje >= 0 ? `~${costos.porcentaje}% menos` : `~${-costos.porcentaje}% más`}
+                </Text>
+                <Text dimColor> que haciéndolo todo con el modelo principal · {lista.length} agentes · ya cuenta lo que cuesta delegar · estimación con precios relativos, no tu factura</Text>
               </Text>
             )}
           </Section>
@@ -855,7 +858,7 @@ export const register: Register = on => {
               <Text key={`ap-${tipo}`} wrap="truncate-end">
                 <Text bold>{tipo.replace('equipo:', '')}</Text>{' '}
                 <Text dimColor>
-                  {r.veces} {r.veces === 1 ? 'trabajo' : 'trabajos'} · {r.nivel === null ? 'modelo de siempre' : `ahora con ${r.nivel}`}
+                  {r.veces} {r.veces === 1 ? 'trabajo' : 'trabajos'} · {r.nivel === null ? 'modelo de siempre' : `ahora con ${r.nivel}`} · {r.neto >= 0 ? 'ahorra' : 'pierde'} ~{short(Math.abs(r.neto))}
                   {r.subidas > 0 ? ` · lo subió ${r.subidas} ${r.subidas === 1 ? 'vez' : 'veces'}` : ''}
                 </Text>
               </Text>

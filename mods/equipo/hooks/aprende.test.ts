@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { aprender, esBueno, lecciones, modeloAprendido, promedio } from './aprende'
+import { aprender, cumpleContrato, esBueno, lecciones, modeloAprendido, promedio } from './aprende'
 import type { Aprendizaje } from '../types'
 
 const T = 'equipo:explorador'
@@ -28,7 +28,7 @@ test('dos fallos seguidos con Haiku suben el tipo a Sonnet y queda la lección',
   const a = rep({}, 2, false)
   expect(modeloAprendido(a, T)).toBe('sonnet')
   expect(a[T]?.subidas).toBe(1)
-  expect(lecciones(a)[0]).toMatch(/explorador falló con Haiku/)
+  expect(lecciones(a)[0]).toMatch(/explorador falló con haiku/)
 })
 
 test('un fallo suelto entre aciertos no cambia nada', () => {
@@ -51,4 +51,32 @@ test('no aprende de lo que corrió con otro modelo que el del equipo, ni de tipo
 
 test('lleva la cuenta del gasto medio', () => {
   expect(promedio(rep({}, 3, true)[T]!)).toBe(100)
+})
+
+test('un obrero que falla con Sonnet sube a Opus, y baja un escalón tras 8 aciertos', () => {
+  const O = 'equipo:obrero'
+  let a: Aprendizaje = {}
+  for (let i = 0; i < 2; i++) a = aprender(a, O, 'sonnet', false, 100)
+  expect(modeloAprendido(a, O)).toBe('opus')
+  for (let i = 0; i < 8; i++) a = aprender(a, O, 'opus', true, 100)
+  expect(modeloAprendido(a, O)).toBe('sonnet')
+})
+
+test('el contrato de cada tipo: ruta, fuentes, veredicto', () => {
+  expect(cumpleContrato('equipo:explorador', 'Está en src/login.ts:42')).toBe(true)
+  expect(cumpleContrato('equipo:explorador', 'No lo encontré; miré en src y lib')).toBe(true)
+  expect(cumpleContrato('equipo:explorador', 'creo que sí')).toBe(false)
+  expect(cumpleContrato('equipo:investigador', 'Resumen.\nFuentes: https://a.com')).toBe(true)
+  expect(cumpleContrato('equipo:investigador', 'Resumen sin enlaces')).toBe(false)
+  expect(cumpleContrato('equipo:revisor', 'TODO BIEN')).toBe(true)
+  expect(cumpleContrato('equipo:revisor', 'todo parece correcto')).toBe(false)
+  expect(esBueno('answer', 'hallé algo vago', 'equipo:explorador')).toBe(false)
+})
+
+test('un tipo que en 5 trabajos no ahorra nada recibe la lección de hacerlo uno mismo', () => {
+  let a: Aprendizaje = {}
+  for (let i = 0; i < 5; i++) a = aprender(a, 'equipo:explorador', 'haiku', true, 100, -50)
+  expect(lecciones(a).join(' ')).toMatch(/explorador no está saliendo a cuenta/)
+  for (let i = 0; i < 5; i++) a = aprender(a, 'equipo:explorador', 'haiku', true, 100, 500)
+  expect(lecciones(a).join(' ')).not.toMatch(/a cuenta/)
 })

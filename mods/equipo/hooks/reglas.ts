@@ -24,8 +24,14 @@ const RANGO: Record<Familia, number> = { haiku: 1, sonnet: 2, opus: 3, otro: 2 }
 export const costo = (r: Pick<Registro, 'nuevo' | 'cache' | 'escrito'>, familia: Familia): number =>
   (r.nuevo + r.cache * 0.1 + r.escrito * 5) * PRECIO[familia]
 
-/** El ahorro estimado de un agente: lo que habría costado en el modelo del director menos lo que costó. */
-export const ahorro = (r: Registro): number => Math.max(0, costo(r, r.padre === 'otro' ? 'opus' : r.padre) - costo(r, r.familia))
+const delDirector = (r: Pick<Registro, 'padre'>): Familia => (r.padre === 'otro' ? 'opus' : r.padre)
+
+/** Lo que cuesta delegar al director: escribir el encargo (salida) y leer la respuesta (entrada). */
+export const sobrecosto = (r: Pick<Registro, 'padre' | 'encargo' | 'respuesta'>): number =>
+  ((r.encargo ?? 0) * 5 + (r.respuesta ?? 0)) * PRECIO[delDirector(r)]
+
+/** El ahorro neto de un agente: lo que habría costado con el modelo del director, menos lo que costó, menos el costo de delegar. Puede salir negativo. */
+export const ahorro = (r: Registro): number => costo(r, delDirector(r)) - costo(r, r.familia) - sobrecosto(r)
 
 /** Con qué modelo corre cada tipo de agente cuando quien lo lanza no pidió uno. */
 export const MODELO_POR_TIPO: Record<string, 'haiku' | 'sonnet'> = {
@@ -47,10 +53,10 @@ export const modeloParaAgente = (a: {
   padre: string
   fork: boolean
   /** Lo que el equipo aprendió para este tipo; si falta, vale el de siempre. */
-  aprendido?: 'haiku' | 'sonnet' | undefined
+  aprendido?: 'haiku' | 'sonnet' | 'opus' | undefined
 }): string | undefined => {
   if (a.fork || (a.pedido !== undefined && a.pedido !== '')) return undefined
-  const objetivo = a.aprendido ?? MODELO_POR_TIPO[a.tipo]
+  const objetivo: 'haiku' | 'sonnet' | 'opus' | undefined = a.aprendido ?? MODELO_POR_TIPO[a.tipo]
   if (objetivo === undefined) return undefined
   const rangoPadre = RANGO[familiaDe(a.padre)]
   // Un agente del equipo trae su propio modelo fijo: se pone siempre, y nunca más caro que el director.

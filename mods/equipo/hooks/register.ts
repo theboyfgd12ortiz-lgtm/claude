@@ -27,7 +27,7 @@ export const resumenEquipo = (lista: readonly Registro[]): string => {
     .map(([f, n]) => `${n} con ${f}`)
     .join(', ')
 
-  return `${lista.length} agentes (${porModelo})${trabajando > 0 ? `, ${trabajando} trabajando` : ''} · ahorro estimado ~${Math.round(ahorrado / 1000).toLocaleString('es')}k unidades (comparado con hacerlo todo con el modelo del director; es una estimación).`
+  return `${lista.length} agentes (${porModelo})${trabajando > 0 ? `, ${trabajando} trabajando` : ''} · ${ahorrado >= 0 ? 'ahorro' : 'sobrecosto'} neto estimado ~${Math.abs(Math.round(ahorrado / 1000)).toLocaleString('es')}k unidades (ya descontado lo que cuesta delegar; comparado con hacerlo todo con el modelo del director; es una estimación).`
 }
 
 /** Cambia lo aprendido y lo guarda para la próxima sesión. */
@@ -45,12 +45,18 @@ const guardar = async ($: EngineInterface, i: Investigacion): Promise<string> =>
 }
 
 export const register: Register = on => {
+  // Agente de la autoprueba en curso.
+  let pruebaId: string | undefined
+
+  // Obreros que terminaron desde la última revisión: si el revisor encuentra problemas, se les anota.
+  let obreros: { familia: string }[] = []
+
   on('session.start', async ($, e, next) => {
     for (const spec of AGENTES) await $.agent.register(spec).catch(() => undefined)
     await $.command.register({
       name: 'equipo',
-      description: 'Equipo de agentes con modelos baratos: /equipo · on|off · olvidar',
-      argumentHint: 'on|off|olvidar',
+      description: 'Equipo de agentes con modelos baratos: /equipo · on|off · olvidar · probar',
+      argumentHint: 'on|off|olvidar|probar',
     })
     await $.command.register({
       name: 'investigar',
@@ -82,7 +88,7 @@ export const register: Register = on => {
     const objetivo =
       e.fork || e.isTeammate === true || e.workflow !== undefined || !(await read($, isAuto))
         ? undefined
-        : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: e.parentModel, fork: false, aprendido: modeloAprendido(await read($, aprendizaje), e.subagentType) })
+        : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: e.parentModel ?? '', fork: false, aprendido: modeloAprendido(await read($, aprendizaje), e.subagentType) })
     const lanzado = await next(objetivo === undefined ? e : { ...e, model: objetivo })
     if (lanzado.deny !== undefined || lanzado.agentId === undefined) return lanzado
 
@@ -93,13 +99,14 @@ export const register: Register = on => {
       descripcion: e.description,
       modelo: lanzado.model,
       familia: familiaDe(lanzado.model),
-      padre: familiaDe(e.parentModel),
+      padre: familiaDe(e.parentModel ?? ''),
       at: await $.clock.now(),
       fin: null,
       estado: 'trabajando',
       nuevo: 0,
       cache: 0,
       escrito: 0,
+      encargo: Math.ceil(e.prompt.length / 4),
     }
     await update($, agentes, l => [reg, ...l].slice(0, MAX))
 
@@ -110,7 +117,11 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     const id = e.agentId
-    if (id === undefined) return done
+    if (id === undefined) {
+      obreros = []
+
+      return done
+    }
 
     const u = e.usage
     if (u !== undefined) {
@@ -122,10 +133,26 @@ export const register: Register = on => {
         ),
       )
     }
+    if (id === pruebaId) {
+      pruebaId = undefined
+      const ok = e.reason === 'answer' && typeof e.answer === 'string' && e.answer.trim() !== ''
+      $.ui.toast(ok ? 'equipo: autoprueba superada, el agente respondió.' : 'equipo: autoprueba falló, el agente no respondió.')
+    }
     const fin = await $.clock.now()
-    const lista = await update($, agentes, l => l.map(r => (r.id === id ? { ...r, estado: 'listo' as const, fin } : r)))
+    const respuesta = typeof e.answer === 'string' ? Math.ceil(e.answer.length / 4) : 0
+    const lista = await update($, agentes, l => l.map(r => (r.id === id ? { ...r, estado: 'listo' as const, fin, respuesta } : r)))
     const reg = lista.find(r => r.id === id)
-    if (reg !== undefined) await recordar($, a => aprender(a, reg.tipo, reg.familia, esBueno(e.reason, e.answer), costo(reg, reg.familia)))
+    if (reg !== undefined) {
+      const bueno = esBueno(e.reason, e.answer, reg.tipo)
+      await recordar($, a => aprender(a, reg.tipo, reg.familia, bueno, costo(reg, reg.familia), ahorro(reg)))
+      if (reg.tipo === 'equipo:obrero') obreros = [...obreros, { familia: reg.familia }].slice(-3)
+      // El revisor encontró problemas en lo que hicieron los obreros: eso sí es un fallo de ellos.
+      if (reg.tipo === 'equipo:revisor' && bueno && typeof e.answer === 'string' && !/TODO BIEN/.test(e.answer) && obreros.length > 0) {
+        const culpables = obreros
+        obreros = []
+        await recordar($, a => culpables.reduce((acc, o) => aprender(acc, 'equipo:obrero', o.familia, false, 0, 0, false), a))
+      }
+    }
     const actual = await read($, investigacion)
     if (actual !== null && actual.estado === 'trabajando' && actual.id === id) {
       const texto = e.reason === 'answer' && typeof e.answer === 'string' ? e.answer.trim() : ''
@@ -141,6 +168,17 @@ export const register: Register = on => {
     if (arg === 'on' || arg === 'off') {
       await update($, isAuto, () => arg === 'on')
       await $.store.set('isAuto', arg === 'on').catch(() => undefined)
+    }
+    if (arg === 'probar') {
+      try {
+        const r = await $.agent.spawn({ prompt: 'Lista los nombres de los archivos que hay en la carpeta actual (solo el nivel superior) y responde en una línea.', description: 'Autoprueba del equipo', subagentType: 'equipo:explorador', model: 'haiku' })
+        if (r.deny !== undefined) return { text: `Autoprueba: el agente fue rechazado (${r.deny}).` }
+        pruebaId = r.agentId
+
+        return { text: `Autoprueba lanzada. El agente corre con "${r.model}" (esperado: haiku, o el modelo del director si es más barato). Te aviso cuando responda.` }
+      } catch (error) {
+        return { text: `Autoprueba: no se pudo lanzar un agente (${error instanceof Error ? error.message : String(error)}). El reparto automático no funcionará en esta sesión.` }
+      }
     }
     if (arg === 'olvidar') await recordar($, () => ({}))
     const auto = await read($, isAuto)
@@ -173,7 +211,7 @@ export const register: Register = on => {
     const nueva: Investigacion = { id: '', pregunta: arg, at: ahora, estado: 'trabajando', texto: '', archivo: null }
     await update($, investigacion, () => nueva)
     try {
-      const r = await $.agent.spawn({ prompt: arg, description: `Investigar: ${arg.slice(0, 40)}`, subagentType: 'equipo:investigador' })
+      const r = await $.agent.spawn({ prompt: arg, description: `Investigar: ${arg.slice(0, 40)}`, subagentType: 'equipo:investigador', model: 'haiku' })
       if (r.deny !== undefined) throw new Error(r.deny)
       const agentId = r.agentId ?? ''
       await update($, investigacion, v => (v === null ? v : { ...v, id: agentId }))

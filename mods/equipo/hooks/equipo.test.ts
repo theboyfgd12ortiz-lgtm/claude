@@ -82,3 +82,32 @@ test('el equipo aprende: dos fallos del explorador y la próxima vez corre con S
   await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:explorador' } as never)
   expect(modelos).toEqual(['haiku', 'haiku', 'sonnet'])
 })
+
+test('/equipo probar lanza un explorador barato y dice con qué modelo corre', async ($, on) => {
+  on('clock.now', () => ({ value: 1000 }) as never)
+  on('agent.spawn', (_$, e) => ({ model: e.model ?? 'opus', agentId: 'p1' }) as never)
+  const CMD = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as const
+  const r = await $.command.run({ command: 'equipo', args: 'probar', ...CMD } as never)
+  expect(r.text).toMatch(/Autoprueba lanzada.*"haiku"/)
+})
+
+test('el revisor que halla problemas castiga al obrero; TODO BIEN no', async ($, on) => {
+  on('clock.now', () => ({ value: 1000 }) as never)
+  on('turn.complete', () => ({ text: '' }) as never)
+  let n = 0
+  on('agent.spawn', (_$, e) => ({ model: e.model ?? 'opus', agentId: `a${++n}` }) as never)
+  const uso = { input_tokens: 10, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+  const CMD = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as const
+  const ronda = async (veredicto: string) => {
+    await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:obrero' } as never)
+    await $.turn.complete({ agentId: `a${n}`, reason: 'answer', answer: 'Cambié src/a.ts y corrí las pruebas: pasan.', usage: uso } as never)
+    await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:revisor' } as never)
+    await $.turn.complete({ agentId: `a${n}`, reason: 'answer', answer: veredicto, usage: uso } as never)
+  }
+  await ronda('TODO BIEN')
+  await ronda('TODO BIEN')
+  expect((await $.command.run({ command: 'equipo', args: '', ...CMD } as never)).text).not.toMatch(/falló/)
+  await ronda('- src/a.ts: falta validar vacío')
+  await ronda('- src/b.ts: rompe el login')
+  expect((await $.command.run({ command: 'equipo', args: '', ...CMD } as never)).text).toMatch(/obrero falló/)
+})
