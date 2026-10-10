@@ -1,5 +1,8 @@
 {
   "name": "mejorar-prompt",
-  "description": "/mejorar <tu pedido> lo convierte, con Haiku y en segundos, en un pedido claro (objetivo, detalles, cuándo está listo) y te lo deja en el cuadro para revisarlo antes de enviar.",
-  "author": { "name": "theboyfgd12ortiz-lgtm" }
+  "description": "Mejora tus pedidos solo: si escribes algo corto y vago, Claude pregunta lo que falta (o dice sus supuestos) antes de construir. El panel tiene el botón \"Mejorar mi borrador\" (también /mejorar).",
+  "author": {
+    "name": "theboyfgd12ortiz-lgtm"
+  },
+  "types": "./types/index.d.ts"
 }

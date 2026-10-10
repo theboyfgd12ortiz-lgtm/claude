@@ -14,12 +14,12 @@ Mods para Claude Code que eligen el modelo justo, recortan lo que gasta tokens, 
 | **humanizer** (de [blader](https://github.com/blader/humanizer)) | Solo actúa cuando se lo pides ("humaniza este texto"): quita lo que suena a IA sin cambiar lo que dice. Útil para textos de clientes. | — | ✅✅ |
 | **output-trim** | Red de seguridad: si una salida de Bash sigue siendo enorme, la corta a inicio + final y guarda el texto completo en `/tmp`. | ✅✅ | ✅ |
 | **quality-coach** | Cinco reglas de trabajo en el prompt de sistema, aviso si se editó código sin probarlo, y mejores resúmenes al compactar. | ✅ | ✅✅✅ |
-| **presupuesto** | Vigila tu límite semanal y de 5 horas. Desde el 80 % baja solo el tope del modelo y pide respuestas más económicas; desde el 95 %, ahorro máximo. Cuando el límite se renueva, lo devuelve como estaba. `/presupuesto off` lo apaga. | ✅✅✅ | — |
-| **traspaso** | `/guardar` resume la conversación en `.claude/traspaso.md` (barato: reutiliza la caché). Luego `/clear` y `/retomar`, y sigues donde ibas en una charla limpia, que cuesta mucho menos. | ✅✅✅ | ✅ |
-| **mejorar-prompt** | `/mejorar <tu pedido>` lo convierte con Haiku en un pedido claro (objetivo, detalles, cuándo está listo) y te lo deja en el cuadro para revisarlo. | ✅ | ✅✅ |
+| **presupuesto** | Vigila tu límite semanal y de 5 horas, sin que hagas nada. Desde el 80 % limita el modelo (máximo Sonnet) y me pide respuestas más económicas; desde el 95 %, ahorro máximo. Cuando el límite se renueva, todo vuelve a la normalidad. | ✅✅✅ | — |
+| **traspaso** | **Guarda solo** el progreso cuando la conversación se llena (45 % del contexto), en `.claude/traspaso.md`. Te avisa y, en una charla limpia, el panel ofrece **Retomar**. Con `/guardar` y `/retomar` también se puede a mano. | ✅✅✅ | ✅ |
+| **mejorar-prompt** | **Automático:** si escribes algo corto y vago ("haz una página para mi panadería"), yo pregunto lo que falta (máximo 3 preguntas) antes de construir. Tu texto no cambia y no cuesta ninguna llamada extra. El botón **Mejorar mi borrador** del panel reescribe lo que tengas en el cuadro. | ✅ | ✅✅ |
 | **guardian** | Bloquea `rm -rf /` o `~`, `git push --force`, formatear discos y leer `.env`, llaves privadas o credenciales. `/guardian off` lo pausa. | — | ✅✅ |
 | **token-meter** | Barra con tokens, % de caché, tiempo y herramientas del último turno; `/tokens` da el total. | ✅ (te deja ver el gasto) | — |
-| **mods-panel** | El **Centro de control** (`/mods`): tus límites de uso arriba; qué estoy haciendo en vivo y el plan con avances; los archivos cambiados con su antes y después; el ahorro con gráfico; el modelo con botones 1-9; todos los mods con su botón y una revisión de la instalación. Te avisa con una notificación cuando termina una tarea larga. | — | ✅ |
+| **mods-panel** | El **Centro de control** (`/mods`): tus límites de uso arriba; el aviso "hay un trabajo guardado" con su botón Retomar; qué estoy haciendo en vivo y el plan con avances; los archivos cambiados con su antes y después; el ahorro con gráfico; el modelo con botones 1-9; todos los mods con su botón y una revisión de la instalación. Te avisa con una notificación cuando termina una tarea larga. | — | ✅ |
 
 `rtk`, `caveman`, `ponytail`, `token-optimizer` y `humanizer` son proyectos de terceros. No están copiados aquí: el instalador los baja de su repositorio original, así recibes sus arreglos. De rtk solo viaja, tal cual, el script del hook (`mods/rtk-hook/`, con su licencia).
 
@@ -93,9 +93,7 @@ Para actualizar, abre una sesión nueva después de cambiar el script o espera a
 - `/guardian [off | on]`: pausa o reactiva las protecciones.
 - `/tokens [show | hide | reset]`: totales de la sesión.
 - `/caveman`: modo de respuestas cortas.
-- `/presupuesto [on | off]`: el cuidado del límite de uso.
-- `/guardar [nota]` y `/retomar`: seguir un trabajo largo en una charla limpia.
-- `/mejorar <pedido>`: un pedido claro antes de enviarlo.
+- Estos tres **no hace falta llamarlos**: trabajan solos y todo está en el panel (`/mods`). Si quieres, existen como comandos: `/presupuesto [on | off]`, `/guardar` y `/retomar`, `/mejorar [pedido | on | off]`.
 
 ## Lo que conviene saber
 

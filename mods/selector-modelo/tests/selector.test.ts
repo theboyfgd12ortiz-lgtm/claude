@@ -9,6 +9,7 @@ import {
   leerPuntos,
   peldano,
   puntosANivel,
+  techoEfectivo,
 } from '../hooks/register'
 
 const nivel = (args: string) => ({
@@ -173,4 +174,11 @@ test('el panel se dibuja y sus botones cambian el nivel', async $ => {
     expect(await ui.find({ type: 'Text', text: /automático/ })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('el presupuesto puede bajar el tope, nunca subirlo', async () => {
+  expect(techoEfectivo(9, null)).toBe(9)
+  expect(techoEfectivo(9, 4)).toBe(4)
+  expect(techoEfectivo(3, 5)).toBe(3)
+  expect(techoEfectivo(9, undefined)).toBe(9)
 })

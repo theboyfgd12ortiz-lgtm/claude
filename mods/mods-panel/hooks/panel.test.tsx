@@ -1,3 +1,4 @@
+import type { On } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
 
 import { chartSvg, describeTool, parseRtk, percent, personText, planAdd, planFromTodos, planUpdate, resetLabel, short, usageColor } from './model'
@@ -168,5 +169,38 @@ test('the Cambios tab lists each edit and shows its diff', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /index.html/ })).toBeDefined()
   await ui.press({ key: 'chg-btn-0' })
   expect(await ui.find({ type: 'Code' })).toBeDefined()
+  await ui.unmount()
+})
+
+/** A stand-in for traspaso: it publishes a saved note under its own name, as the real mod does. */
+const traspasoSimulado = {
+  name: 'traspaso',
+  register: (on: On) => {
+    on('session.start', async ($, e, next) => {
+      await $.state.set({ plugin: 'traspaso', key: 'nota' } as const, {
+        at: Date.now() - 3_600_000,
+        donde: '.claude/traspaso.md',
+        resumen: 'Landing de la panadería',
+        isAuto: false,
+      })
+
+      return next(e)
+    })
+  },
+}
+
+test('offers to resume a saved note in a fresh chat', { plugins: [traspasoSimulado] }, async ($, on) => {
+  mock.clock(on)
+  on('command.register', () => ({ value: { command: 'x' } }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('session.start', () => ({ cwd: '/r' }) as never)
+  on('command.list', () => ({ value: [] }) as never)
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 5 }, rateLimits: [] } }) as never)
+  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
+  expect(await ui.find({ type: 'Text', text: /Hay un trabajo guardado/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Landing de la panadería/ })).toBeDefined()
+  expect(await ui.find({ key: 'note-resume' })).toBeDefined()
   await ui.unmount()
 })

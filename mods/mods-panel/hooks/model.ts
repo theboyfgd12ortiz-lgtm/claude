@@ -212,3 +212,13 @@ export const unifiedDiff = (file: string, before: string, after: string): string
     ...now.map(l => `+${l}`),
   ].join('\n')
 }
+
+/** "hace 5 min", "hace 3 h", "hace 2 días". */
+export const hace = (desde: number, ahora: number): string => {
+  const min = Math.max(0, Math.round((ahora - desde) / 60_000))
+  if (min < 1) return 'hace un momento'
+  if (min < 60) return `hace ${min} min`
+  if (min < 48 * 60) return `hace ${Math.round(min / 60)} h`
+
+  return `hace ${Math.round(min / 1440)} días`
+}

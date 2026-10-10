@@ -10,7 +10,9 @@
     "quality-coach",
     "token-meter",
     "selector-modelo",
-    "presupuesto"
+    "presupuesto",
+    "traspaso",
+    "mejorar-prompt"
   ],
   "types": "./types/index.d.ts"
 }

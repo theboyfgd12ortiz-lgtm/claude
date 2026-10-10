@@ -6,8 +6,8 @@ export type Estado = {
   semana: number | null
   cincoHoras: number | null
   renuevaSemana: string | null
-  /** El tope que tenía el selector antes de que este mod lo bajara; null si no lo tocó. */
-  topeAnterior: number | null
+  /** El nivel más alto del selector que se permite ahora; null mientras no hay límite. El selector lo lee solo. */
+  topeMax: number | null
 }
 
 declare module 'claude-code' {

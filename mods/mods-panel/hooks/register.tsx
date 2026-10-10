@@ -12,6 +12,7 @@ import {
   describeTool,
   duration,
   familyColor,
+  hace,
   LADDER,
   parseRtk,
   percent,
@@ -65,6 +66,10 @@ const changes = atom({ plugin: 'mods-panel', key: 'changes' } as const, [])
 const shown = atom({ plugin: 'mods-panel', key: 'shown' } as const, null)
 const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
 const presupuestoAuto = { plugin: 'presupuesto', key: 'isAuto' } as const
+const traspasoNota = { plugin: 'traspaso', key: 'nota' } as const
+const traspasoAuto = { plugin: 'traspaso', key: 'isAuto' } as const
+const mejorarAuto = { plugin: 'mejorar-prompt', key: 'isAuto' } as const
+const mejorarAvisados = { plugin: 'mejorar-prompt', key: 'avisados' } as const
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'ahora', label: 'Ahora' },
@@ -493,8 +498,30 @@ export const register: Register = on => {
       const steps = await read($, plan)
       const items = (await read($, feed)).slice(-12).reverse()
       const doneSteps = steps.filter(p => p.status === 'completed').length
+      const saved = (await $.state.get(traspasoNota)).value
+      const ctx = usage?.context.percent ?? 0
+      // A saved note is worth offering in a fresh conversation (little context), when it is recent enough.
+      const offerNote = saved !== undefined && saved !== null && ctx < 20 && saved.at > 0 && now - saved.at < 3 * 86_400_000
+      // A long conversation with a saved note: say how to continue clean.
+      const suggestClean = saved !== undefined && saved !== null && ctx >= 45 && !l.isWorking && now - saved.at < 3_600_000
       body = (
         <Box flexDirection="column">
+          {offerNote && (
+            <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="suggestion" paddingX={1}>
+              <Text bold>📌 Hay un trabajo guardado ({hace(saved.at, now)})</Text>
+              {saved.resumen !== '' && <Text wrap="wrap">{saved.resumen}</Text>}
+              <Box flexDirection="row" columnGap={1} marginTop={1}>
+                <Button key="note-resume" variant="primary" label="Retomar" onPress={() => $.command.run({ command: 'retomar' })} />
+                <Button key="note-drop" label="Descartar" onPress={() => $.command.run({ command: 'traspaso', args: 'descartar' })} />
+              </Box>
+            </Box>
+          )}
+          {suggestClean && (
+            <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="warning" paddingX={1}>
+              <Text bold>🧹 Tu charla está larga ({Math.round(ctx)}% del contexto)</Text>
+              <Text wrap="wrap">Ya guardé el progreso. Escribe /clear para empezar limpio (gastas mucho menos) y aquí te aparecerá "Retomar".</Text>
+            </Box>
+          )}
           <Section title={l.isWorking ? '⏳ TRABAJANDO' : '✓ EN ESPERA'}>
             {l.isWorking ? (
               <Box flexDirection="column">
@@ -671,6 +698,9 @@ export const register: Register = on => {
               <Button key="sel-tope-up" label="Tope +" onPress={() => $.command.run({ command: 'nivel', args: `tope ${Math.min(9, tope + 1)}` })} />
             </Box>
             <Text dimColor>Tocar un número lo fija a mano; "Automático" deja que elija solo. El tope es el nivel máximo que puede usar.</Text>
+            {budget?.topeMax != null && (
+              <Text color="warning">💰 Presupuesto: tu límite semanal va por {Math.round(budget.semana ?? 0)}%, así que el modelo no pasa del nivel {budget.topeMax} por ahora.</Text>
+            )}
           </Section>
 
           {ultima !== undefined && (
@@ -774,19 +804,25 @@ export const register: Register = on => {
         },
         {
           key: 'traspaso',
-          on: x.plugins.includes('traspaso'),
+          on: x.plugins.includes('traspaso') && ((await $.state.get(traspasoAuto)).value ?? true),
           name: 'Traspaso',
-          what: '/guardar resume la charla para seguir en una limpia (/clear) y /retomar la continúa.',
-          stat: x.plugins.includes('traspaso') ? undefined : 'no instalado',
+          what: 'Guarda solo el progreso cuando la charla se llena, para seguir en una limpia sin perder nada.',
+          stat: !x.plugins.includes('traspaso')
+            ? 'no instalado'
+            : (await $.state.get(traspasoNota)).value
+              ? `nota guardada ${hace((await $.state.get(traspasoNota)).value?.at ?? now, now)}`
+              : 'aún no hay nota guardada',
           action: x.plugins.includes('traspaso') ? { label: 'Guardar ahora', press: () => $.command.run({ command: 'guardar' }) } : undefined,
         },
         {
           key: 'mejorar',
-          on: x.plugins.includes('mejorar-prompt'),
+          on: x.plugins.includes('mejorar-prompt') && ((await $.state.get(mejorarAuto)).value ?? true),
           name: 'Mejorar pedido',
-          what: '/mejorar <pedido> lo vuelve claro y completo antes de enviarlo.',
-          stat: x.plugins.includes('mejorar-prompt') ? undefined : 'no instalado',
-          action: x.plugins.includes('mejorar-prompt') ? { label: 'Usar', press: () => offer($, '/mejorar ') } : undefined,
+          what: 'Si escribes algo corto y vago, Claude pregunta lo que falta antes de construir. Tu texto no cambia.',
+          stat: !x.plugins.includes('mejorar-prompt') ? 'no instalado' : `${(await $.state.get(mejorarAvisados)).value ?? 0} pedidos vagos atendidos`,
+          action: x.plugins.includes('mejorar-prompt')
+            ? { label: 'Mejorar mi borrador', press: () => $.command.run({ command: 'mejorar' }) }
+            : undefined,
         },
         ...EXTRAS.map(t => ({
           key: t.plugin,
