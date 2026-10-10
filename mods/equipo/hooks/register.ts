@@ -30,6 +30,14 @@ export const resumenEquipo = (lista: readonly Registro[]): string => {
   return `${lista.length} agentes (${porModelo})${trabajando > 0 ? `, ${trabajando} trabajando` : ''} · ${ahorrado >= 0 ? 'ahorro' : 'sobrecosto'} neto estimado ~${Math.abs(Math.round(ahorrado / 1000)).toLocaleString('es')}k unidades (ya descontado lo que cuesta delegar; comparado con hacerlo todo con el modelo del director; es una estimación).`
 }
 
+/** Lanza un agente; el clasificador del modo automático a veces no da veredicto la primera vez y pide repetir una vez. */
+const lanzar = async ($: EngineInterface, args: Parameters<EngineInterface['agent']['spawn']>[0]) => {
+  const r = await $.agent.spawn(args)
+  if (r.deny !== undefined && /classifier|verdict/i.test(r.deny)) return $.agent.spawn(args)
+
+  return r
+}
+
 /** Cambia lo aprendido y lo guarda para la próxima sesión. */
 const recordar = async ($: EngineInterface, cambio: (a: Aprendizaje) => Aprendizaje) => {
   const nuevo = await update($, aprendizaje, cambio)
@@ -171,8 +179,13 @@ export const register: Register = on => {
     }
     if (arg === 'probar') {
       try {
-        const r = await $.agent.spawn({ prompt: 'Lista los nombres de los archivos que hay en la carpeta actual (solo el nivel superior) y responde en una línea.', description: 'Autoprueba del equipo', subagentType: 'equipo:explorador', model: 'haiku' })
-        if (r.deny !== undefined) return { text: `Autoprueba: el agente fue rechazado (${r.deny}).` }
+        const r = await lanzar($, { prompt: 'Lista los nombres de los archivos que hay en la carpeta actual (solo el nivel superior) y responde en una línea.', description: 'Autoprueba del equipo', subagentType: 'equipo:explorador', model: 'haiku' })
+        if (r.deny !== undefined) {
+          // Lanzado por Claude mismo sí pasa por el permiso normal: se deja la petición lista para enviar.
+          await $.prompt.fill({ text: 'Usa el agente equipo:explorador (model haiku) para listar los archivos de la carpeta actual y dime con qué modelo corrió.' }).catch(() => undefined)
+
+          return { text: `El modo automático no dejó que el comando lance el agente (${r.deny.slice(0, 120)}). Dejé la petición escrita en el cuadro: envíala y Claude lo lanzará él, que sí tiene permiso.` }
+        }
         pruebaId = r.agentId
 
         return { text: `Autoprueba lanzada. El agente corre con "${r.model}" (esperado: haiku, o el modelo del director si es más barato). Te aviso cuando responda.` }
@@ -211,7 +224,7 @@ export const register: Register = on => {
     const nueva: Investigacion = { id: '', pregunta: arg, at: ahora, estado: 'trabajando', texto: '', archivo: null }
     await update($, investigacion, () => nueva)
     try {
-      const r = await $.agent.spawn({ prompt: arg, description: `Investigar: ${arg.slice(0, 40)}`, subagentType: 'equipo:investigador', model: 'haiku' })
+      const r = await lanzar($, { prompt: arg, description: `Investigar: ${arg.slice(0, 40)}`, subagentType: 'equipo:investigador', model: 'haiku' })
       if (r.deny !== undefined) throw new Error(r.deny)
       const agentId = r.agentId ?? ''
       await update($, investigacion, v => (v === null ? v : { ...v, id: agentId }))

@@ -111,3 +111,17 @@ test('el revisor que halla problemas castiga al obrero; TODO BIEN no', async ($,
   await ronda('- src/b.ts: rompe el login')
   expect((await $.command.run({ command: 'equipo', args: '', ...CMD } as never)).text).toMatch(/obrero falló/)
 })
+
+test('si el clasificador no da veredicto, /equipo probar reintenta una vez', async ($, on) => {
+  on('clock.now', () => ({ value: 1000 }) as never)
+  let intentos = 0
+  on('agent.spawn', (_$, e) => {
+    intentos += 1
+
+    return (intentos === 1 ? { deny: 'The server-side auto mode classifier gave no verdict' } : { model: e.model ?? 'opus', agentId: 'p1' }) as never
+  })
+  const CMD = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as const
+  const r = await $.command.run({ command: 'equipo', args: 'probar', ...CMD } as never)
+  expect(intentos).toBe(2)
+  expect(r.text).toMatch(/Autoprueba lanzada/)
+})
