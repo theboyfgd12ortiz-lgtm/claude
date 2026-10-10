@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { ElementConstructor, EngineInterface, Register, SvgProps } from 'claude-code'
+import type { ElementConstructor, EngineInterface, InputProps, Register, SvgProps } from 'claude-code'
 
 import type { Change, FeedItem, HealthCheck, Live, PanelExtras, RtkInfo, Tab, Tone } from '../types'
 import {
@@ -66,6 +66,12 @@ const changes = atom({ plugin: 'mods-panel', key: 'changes' } as const, [])
 const shown = atom({ plugin: 'mods-panel', key: 'shown' } as const, null)
 const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
 const presupuestoAuto = { plugin: 'presupuesto', key: 'isAuto' } as const
+const webInforme = { plugin: 'web', key: 'informe' } as const
+const webServicios = { plugin: 'web', key: 'servicios' } as const
+const webUrls = { plugin: 'web', key: 'urls' } as const
+const webOcupado = { plugin: 'web', key: 'ocupado' } as const
+const webAuto = { plugin: 'web', key: 'isAuto' } as const
+const webUrl = atom({ plugin: 'mods-panel', key: 'webUrl' } as const, '')
 const respaldoPuntos = { plugin: 'respaldo', key: 'puntos' } as const
 const respaldoVista = { plugin: 'respaldo', key: 'vista' } as const
 const respaldoMensaje = { plugin: 'respaldo', key: 'mensaje' } as const
@@ -80,6 +86,7 @@ const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'cambios', label: 'Cambios' },
   { id: 'ahorro', label: 'Ahorro' },
   { id: 'modelo', label: 'Modelo' },
+  { id: 'web', label: 'Web' },
   { id: 'mods', label: 'Mods' },
   { id: 'ayuda', label: 'Ayuda' },
 ]
@@ -404,6 +411,8 @@ export const register: Register = on => {
   // ── The pane ──
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Code, Text } = $.ui.resolve(e)
+    // El campo de texto no existe en el móvil: ahí se escribe la dirección con /sitio.
+    const Input = e.surface === 'mobile' ? undefined : ($.ui.resolve(e) as unknown as { Input: ElementConstructor<InputProps> }).Input
     // Desktop and mobile draw a real chart; the terminal gets text bars.
     const Svg =
       e.surface === 'desktop' || e.surface === 'mobile'
@@ -787,6 +796,107 @@ export const register: Register = on => {
           )}
         </Box>
       )
+    } else if (current === 'web') {
+      const informeW = (await $.state.get(webInforme)).value
+      const serviciosW = (await $.state.get(webServicios)).value ?? []
+      const recientes = (await $.state.get(webUrls)).value ?? []
+      const ocupadoW = (await $.state.get(webOcupado)).value
+      const escrita = await read($, webUrl)
+      const autoWeb = (await $.state.get(webAuto)).value ?? true
+      const hayWeb = x.plugins.includes('web') || informeW !== undefined || serviciosW.length > 0
+      const colorNota = (n: number) => (n >= 85 ? 'success' : n >= 60 ? 'warning' : 'error')
+      const TONO = { ok: '✓', warn: '△', bad: '✕' } as const
+      const COLOR_TONO = { ok: 'success', warn: 'warning', bad: 'error' } as const
+      body = !hayWeb ? (
+        <Section title="WEB">
+          <Text dimColor>El mod "web" no está instalado. Corre el instalador para tenerlo.</Text>
+        </Section>
+      ) : (
+        <Box flexDirection="column">
+          <Section title="REVISAR UNA PÁGINA">
+            <Text dimColor>Escribe la dirección de un sitio (el de tu cliente, el que acabas de publicar) y te digo qué falta.</Text>
+            {Input !== undefined && (
+              <Input
+                key="web-url"
+                label="Dirección "
+                placeholder="mi-sitio.netlify.app"
+                value={escrita !== '' ? escrita : (recientes[0] ?? '')}
+                submitLabel="revisar"
+                onInput={(v: string) => update($, webUrl, () => v)}
+                onSubmit={(v: string) => $.command.run({ command: 'sitio', args: v })}
+              />
+            )}
+            <Box flexDirection="row" columnGap={1} flexWrap="wrap" marginTop={1}>
+              <Button key="web-go" variant="primary" label={ocupadoW ? 'Revisando…' : 'Revisar'} onPress={() => $.command.run({ command: 'sitio', args: escrita !== '' ? escrita : (recientes[0] ?? '') })} />
+              {recientes.slice(0, 3).map((u, i) => (
+                <Button key={`web-recent-${i}`} label={u.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 28)} onPress={() => $.command.run({ command: 'sitio', args: u })} />
+              ))}
+            </Box>
+            {ocupadoW && <Text color="suggestion">Revisando {ocupadoW} (puede tardar unos segundos)…</Text>}
+          </Section>
+
+          {informeW && (
+            <Section title={`RESULTADO  ${informeW.isAuto ? '(al publicar) ' : ''}${informeW.url.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 40)}`}>
+              {informeW.status > 0 && informeW.status < 400 && (
+                <Text>
+                  <Text color={colorNota(informeW.puntos)} bold>
+                    {informeW.puntos}/100
+                  </Text>{' '}
+                  <Text color={colorNota(informeW.puntos)}>{bar(informeW.puntos, 100, 20)}</Text>
+                </Text>
+              )}
+              <Text dimColor>
+                {informeW.status > 0 ? `responde ${informeW.status}` : 'sin respuesta'} · {informeW.ms} ms · {informeW.kb} KB · {clock(informeW.at)}
+                {informeW.enlaces ? ` · ${informeW.enlaces.revisados} enlaces probados, ${informeW.enlaces.rotos.length} rotos` : ''}
+              </Text>
+              {informeW.hallazgos.map((hz, i) => (
+                <Box key={`hall-${i}`} flexDirection="column" marginTop={hz.tono === 'ok' ? 0 : 1}>
+                  <Text color={COLOR_TONO[hz.tono]} wrap="wrap">
+                    {TONO[hz.tono]} <Text bold>{hz.titulo}</Text>
+                  </Text>
+                  {hz.tono !== 'ok' && <Text dimColor wrap="wrap">  {hz.detalle}</Text>}
+                </Box>
+              ))}
+              {informeW.hallazgos.some(x2 => x2.tono !== 'ok') && (
+                <Box marginTop={1}>
+                  <Button
+                    key="web-fix"
+                    label="Pedirle a Claude que lo arregle"
+                    onPress={() =>
+                      offer(
+                        $,
+                        `Revisé ${informeW.url} y saqué ${informeW.puntos}/100. Arregla esto en el código de la página, sin cambiar el diseño:\n${informeW.hallazgos
+                          .filter(x2 => x2.tono !== 'ok')
+                          .map(x2 => `- ${x2.titulo}: ${x2.detalle}`)
+                          .join('\n')}`,
+                      )
+                    }
+                  />
+                </Box>
+              )}
+            </Section>
+          )}
+
+          <Section title="¿ESTÁN CAÍDOS?">
+            {serviciosW.length === 0 && <Text dimColor>Consultando…</Text>}
+            {serviciosW.map(sv => (
+              <Text key={`sv-${sv.id}`} wrap="truncate-end">
+                <Text color={sv.estado === 'ok' ? 'success' : sv.estado === 'leve' ? 'warning' : sv.estado === 'grave' ? 'error' : 'inactive'}>{sv.estado === 'ok' ? '●' : sv.estado === 'desconocido' ? '○' : '▲'}</Text>{' '}
+                <Text bold>{sv.nombre}</Text> <Text dimColor>{sv.detalle}</Text>
+              </Text>
+            ))}
+            <Box flexDirection="row" columnGap={1} marginTop={1}>
+              <Button key="web-refresh" label="Actualizar" onPress={() => $.command.run({ command: 'sitio', args: 'servicios' })} />
+              <Button
+                key="web-auto"
+                label={autoWeb ? 'Revisar al publicar: sí' : 'Revisar al publicar: no'}
+                onPress={() => $.command.run({ command: 'sitio', args: `auto ${autoWeb ? 'off' : 'on'}` })}
+              />
+            </Box>
+            <Text dimColor>Si algo falla y aquí sale ▲, el problema no es tuyo: espera a que lo arreglen.</Text>
+          </Section>
+        </Box>
+      )
     } else if (current === 'mods') {
       const blocks = (await $.state.get(guardianBlocks)).value ?? []
       const coach = (await $.state.get(coachStats)).value ?? { codeTurns: 0, verifiedTurns: 0, lastWarning: null }
@@ -826,6 +936,14 @@ export const register: Register = on => {
           name: 'Medidor de tokens',
           what: 'La barra sobre el cuadro de mensaje con el gasto de cada respuesta.',
           action: { label: 'Reiniciar', press: () => $.command.run({ command: 'tokens', args: 'reset' }) },
+        },
+        {
+          key: 'web',
+          on: x.plugins.includes('web'),
+          name: 'Web',
+          what: 'Revisa páginas, avisa si GitHub/Netlify/Supabase están caídos y revisa solo tu sitio al publicarlo.',
+          stat: !x.plugins.includes('web') ? 'no instalado' : (await $.state.get(webInforme)).value ? `última revisión: ${(await $.state.get(webInforme)).value?.puntos}/100` : 'aún no revisaste ninguna página',
+          action: x.plugins.includes('web') ? { label: 'Abrir', press: () => update($, tab, () => 'web' as const) } : undefined,
         },
         {
           key: 'respaldo',
@@ -923,6 +1041,7 @@ export const register: Register = on => {
             <Text>/guardar · /retomar · seguir en una charla limpia</Text>
             <Text>/mejorar &lt;pedido&gt; · pedidos claros</Text>
             <Text>/respaldo · puntos de restauración (el botón Deshacer está en Cambios)</Text>
+            <Text>/sitio &lt;dirección&gt; · revisar una página (todo está en la pestaña Web)</Text>
             <Text>/tokens · gasto de la sesión</Text>
             <Text>/caveman · stop caveman · respuestas cortas</Text>
             <Text>/ponytail off · soluciones mínimas</Text>

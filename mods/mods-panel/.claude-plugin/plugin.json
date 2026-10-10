@@ -13,7 +13,8 @@
     "presupuesto",
     "traspaso",
     "mejorar-prompt",
-    "respaldo"
+    "respaldo",
+    "web"
   ],
   "types": "./types/index.d.ts"
 }

@@ -56,6 +56,11 @@
       "description": "Un punto de restauración antes de cada pedido, con botón Deshacer (usa git sin tocar tus ramas)."
     },
     {
+      "name": "web",
+      "source": "./mods/web",
+      "description": "Revisa páginas web en palabras simples, avisa si GitHub/Netlify/Supabase/Claude están caídos y revisa solo tu sitio al publicarlo."
+    },
+    {
       "name": "mods-panel",
       "source": "./mods/mods-panel",
       "description": "Panel /mods: explica cada mod en español y muestra su estado en vivo."

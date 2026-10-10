@@ -234,3 +234,55 @@ test('Deshacer shows the preview and asks before touching files', { plugins: [re
   expect(await ui.find({ key: 'undo-no' })).toBeDefined()
   await ui.unmount()
 })
+
+/** A stand-in for web: it publishes a finished review and the state of the services. */
+const webSimulado = {
+  name: 'web',
+  register: (on: On) => {
+    on('session.start', async ($, e, next) => {
+      await $.state.set({ plugin: 'web', key: 'urls' } as const, ['https://panaderia.com/'])
+      await $.state.set({ plugin: 'web', key: 'servicios' } as const, [
+        { id: 'github', nombre: 'GitHub', estado: 'ok', detalle: 'Todo funciona', at: 1 },
+        { id: 'netlify', nombre: 'Netlify', estado: 'grave', detalle: 'Caído', at: 1 },
+      ])
+      await $.state.set({ plugin: 'web', key: 'informe' } as const, {
+        url: 'https://panaderia.com/',
+        at: 1,
+        puntos: 62,
+        status: 200,
+        ms: 420,
+        kb: 12,
+        enlaces: { revisados: 5, rotos: ['https://panaderia.com/menu (404)'] },
+        isAuto: false,
+        hallazgos: [
+          { tono: 'bad', titulo: 'No está preparada para el celular', detalle: 'Falta la etiqueta viewport.' },
+          { tono: 'ok', titulo: 'Conexión segura', detalle: 'https' },
+        ],
+      })
+
+      return next(e)
+    })
+  },
+}
+
+test('the Web tab shows the review, the services and a way to ask Claude to fix it', { plugins: [webSimulado] }, async ($, on) => {
+  mock.clock(on)
+  on('command.register', () => ({ value: { command: 'x' } }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('command.list', () => ({ value: [] }) as never)
+  on('session.start', () => ({ cwd: '/r' }) as never)
+  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'mods-panel', surface, ...PANE })
+    await ui.press({ key: 'tab-web' })
+    expect(await ui.find({ type: 'Text', text: /62\/100/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /No está preparada para el celular/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /1 enlaces probados|5 enlaces probados, 1 rotos/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Caído/ })).toBeDefined()
+    expect(await ui.find({ key: 'web-fix' })).toBeDefined()
+    expect(await ui.find({ key: 'web-go' })).toBeDefined()
+    expect(await ui.find({ key: 'web-url' })).toBeDefined()
+    await ui.unmount()
+  }
+})

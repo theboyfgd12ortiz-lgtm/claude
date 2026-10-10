@@ -1,0 +1,6 @@
+{
+  "name": "web",
+  "description": "Revisa páginas web (la de tu cliente, tu sitio recién publicado) y te dice en palabras simples qué falta; avisa si GitHub, Netlify, Supabase o Claude están caídos; y revisa solo el sitio cada vez que lo publicas.",
+  "author": { "name": "theboyfgd12ortiz-lgtm" },
+  "types": "./types/index.d.ts"
+}
