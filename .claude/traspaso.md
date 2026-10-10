@@ -1,39 +1,42 @@
-<!-- traspaso 2026-10-10T19:25:41.644Z auto -->
+<!-- traspaso 2026-10-10T20:20:16.330Z auto -->
 
 ## Objetivo
-El usuario es una persona no técnica que trabaja en Windows (PowerShell, app de escritorio) y también en la nube. Quiere mods de Claude Code que bajen el costo por tarea y den resultados excelentes. Todo debe ser automático (no recuerda los comandos "/"), visible en un solo panel (`/mods`, Centro de control), actualizarse solo y mejorarse a sí mismo. La prioridad es el orquestador `equipo`.
+El usuario no es técnico y trabaja en Windows (PowerShell) y en la nube. Quiere "mods" para Claude Code que bajen el costo por tarea y den resultados excelentes. Todo debe ser automático (sin recordar comandos "/"), visible en un solo panel (Centro de control) y actualizarse solo. La prioridad es el orquestador `equipo`, que debe mejorarse a sí mismo.
 
 ## Hecho
 - Repo `theboyfgd12ortiz-lgtm/claude`, rama `claude/adoring-ride-khnvyf`, todo subido.
-- Mods en `mods/`: selector-modelo, rtk-hook, guardian, output-trim, quality-coach, token-meter, presupuesto, traspaso, mejorar-prompt, respaldo, web, memoria, equipo, mods-panel. Están registrados en `.claude-plugin/marketplace.json` y `.claude/settings.json`.
-- `mods/equipo/`:
-  - Agentes explorador, investigador, obrero y revisor; el hook `agent.spawn` les pone un modelo más barato que el del director.
-  - Aprende por tipo de agente: 2 fallos de 4 suben un escalón hasta Opus; 8 aciertos seguidos lo bajan. Un fallo es una respuesta sin el formato pedido o un problema que encuentra el revisor.
-  - Calcula el ahorro neto y deja la lección "no sale a cuenta" cuando no ahorra.
-  - Límites: 3 agentes a la vez y 6 por tarea. Ajusta el modelo con `dificultad: baja|media|alta`.
-  - Pizarra en `.claude/equipo/pizarra.md` y seguimiento de `.claude/equipo/plan.md`. Pistas por mensaje según el contexto (50 % y 70 %) y si la tarea es grande.
-  - Comandos `/investigar` (`ver`, `guardar`) y `/equipo` (`on`, `off`, `olvidar`, `probar`), con un reintento si el clasificador del modo automático no da veredicto.
-- `mods/mods-panel`: pestaña Equipo con ahorro, plan, agentes, lo aprendido, investigación y botón Probar.
-- Ya se quitó la sección de reparto de `selector-modelo`.
-- Las pruebas de los 13 mods pasan, `tsc` está limpio y `claude plugin validate .` pasa.
+- Mods en `mods/`: selector-modelo, presupuesto, guardian, output-trim, quality-coach, token-meter, traspaso, mejorar-prompt, respaldo, web, memoria, equipo, mods-panel y rtk-hook.
+- `mods/equipo/hooks/` tiene `reglas.ts`, `aprende.ts`, `contexto.ts` y `register.ts`, con sus pruebas:
+  - Agentes explorador e investigador (Haiku), obrero y revisor (Sonnet).
+  - Aprendizaje con escalada y vuelta atrás, contrato de respuesta por tipo y ahorro neto con precios reales 1:20:40.
+  - Dificultad por encargo, límites de 3 agentes a la vez y 6 por tarea, tope de presupuesto y modelo real del director (nivel del selector).
+  - Pizarra por sesión en `.claude/equipo/pizarra.md`, pistas por mensaje según tarea grande, contexto en tokens o presupuesto, y guía fija por sesión.
+  - Comandos `/investigar` (`ver`, `guardar`) y `/equipo` (`probar`, `olvidar`, `on`, `off`).
+- Selector estable con la caché caliente (`decidir` con `fria`).
+- `memoria` fija las notas por sesión y `presupuesto` manda su aviso por mensaje.
+- El panel tiene la pestaña Equipo.
+- Instaladores en `scripts/install-mods.ps1`, `scripts/install-mods.sh` y `scripts/cloud-setup.sh`.
 
 ## Decisiones
-- Las pistas viajan con el mensaje (`prompt.submit`) y no en el prompt de sistema, para no romper la caché.
-- `general-purpose` no se abarata, para no perder calidad.
-- Se descartaron imágenes y datos en `web`, a pedido del usuario.
-- No se usa el Workflow tool sin que el usuario lo pida explícitamente.
-- Sin `version` en `plugin.json`, para que la actualización automática siga el commit.
+- Nada que cambie a mitad de charla va en el prompt de sistema, porque romper la caché cuesta mucho más que los tokens fijos.
+- Se quitó `plan.md`: el plan lo lleva `TodoWrite`, para no contradecirse.
+- `general-purpose` no se baja de modelo, para no perder calidad.
+- `web` no se amplió (sin búsqueda de imágenes ni datos), a pedido del usuario.
+- La herramienta Workflow no se usa sin que el usuario la pida.
 
 ## Pendiente
-1. Recibir el plan de Opus (8 a 12 cambios priorizados: fallos, qué eliminar o fusionar, qué integrar) e implementar los marcados "hacer ya".
-2. Que el usuario pruebe `/equipo probar` en su PC y en la nube (no se ha probado en una sesión real).
-3. Revisar si `WebSearch` pide permiso dentro de los agentes.
-4. Tras cada cambio: `tsc`, pruebas de todos los mods, `validate`, commit y push.
+1. Un solo enrutador que reemplace los avisos del selector y de mejorar-prompt.
+2. Que traspaso guarde desde el resumen de la compactación.
+3. Guardar lo aprendido por proyecto.
+4. Revisar `escalar` y la compactación a 120k del selector.
+5. Medir el costo real por tarea.
+6. Verificación sin tokens.
+7. Que la nube haga `git pull` al iniciar.
+8. El usuario debe probar `/equipo probar` en local y en la nube.
 
 ## Datos clave
-- Compilar: `npx -p typescript tsc -p /tmp/claude-0/-home-user-claude/7d3655b8-4bbf-511b-a610-71bb74ffca08/scratchpad/tsconfig.all.json`
-- Probar: `claude plugin test mods/<nombre>` · Validar: `claude plugin validate .`
-- Tipos de la API: `/root/.claude/dev-mods/*/web/.claude-plugin/types/claude-code/index.d.ts`
-- Actualizar en Windows: `cd C:\Users\thebo\claude-mods`, luego `git pull origin claude/adoring-ride-khnvyf` y `powershell -ExecutionPolicy Bypass -File scripts\install-mods.ps1`
-- Nube: `scripts/cloud-setup.sh` (variable `CLAUDE_CODE_PLUGIN_DIRS`).
-- Commits con las líneas Co-Authored-By y Claude-Session.
+- PowerShell: `cd C:\Users\thebo\claude-mods`, luego `git pull origin claude/adoring-ride-khnvyf`, luego `powershell -ExecutionPolicy Bypass -File scripts\install-mods.ps1`.
+- Script de la nube: `git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/cm && bash /tmp/cm/scripts/cloud-setup.sh`.
+- Pruebas: `claude plugin test mods/<mod>` y `claude plugin validate .`.
+- Precios por millón de entrada: Haiku 5.5 $0.10, Sonnet 5.5 $2, Opus 5.5 $4. La lectura de caché de Sonnet y Opus cuesta $0.20.
+- Si el modo automático rechaza un agente lanzado desde un comando, el mod reintenta una vez.
