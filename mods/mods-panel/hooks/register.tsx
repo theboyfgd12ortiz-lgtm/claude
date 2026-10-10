@@ -1,10 +1,12 @@
 import { atom, read, update } from 'claude-code'
 import type { ElementConstructor, EngineInterface, Register, SvgProps } from 'claude-code'
 
-import type { FeedItem, HealthCheck, Live, PanelExtras, RtkInfo, Tab, Tone } from '../types'
+import type { Change, FeedItem, HealthCheck, Live, PanelExtras, RtkInfo, Tab, Tone } from '../types'
 import {
   bar,
+  CHANGES_MAX,
   CHART_COLORS,
+  clipChange,
   chartSvg,
   clock,
   describeTool,
@@ -23,6 +25,7 @@ import {
   pushHistory,
   short,
   step,
+  unifiedDiff,
 } from './model'
 
 export { parseRtk, percent, short } from './model'
@@ -58,9 +61,14 @@ const live = atom({ plugin: 'mods-panel', key: 'live' } as const, IDLE)
 const history = atom({ plugin: 'mods-panel', key: 'history' } as const, [])
 const health = atom({ plugin: 'mods-panel', key: 'health' } as const, null)
 const asked = atom({ plugin: 'mods-panel', key: 'asked' } as const, null)
+const changes = atom({ plugin: 'mods-panel', key: 'changes' } as const, [])
+const shown = atom({ plugin: 'mods-panel', key: 'shown' } as const, null)
+const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
+const presupuestoAuto = { plugin: 'presupuesto', key: 'isAuto' } as const
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'ahora', label: 'Ahora' },
+  { id: 'cambios', label: 'Cambios' },
   { id: 'ahorro', label: 'Ahorro' },
   { id: 'modelo', label: 'Modelo' },
   { id: 'mods', label: 'Mods' },
@@ -293,6 +301,19 @@ export const register: Register = on => {
     const ran = await next(e)
 
     const took = (await $.clock.now()) - startedAt
+
+    // Every successful file edit, for the Cambios tab.
+    if (ran.deny === undefined && ran.isError !== true && (e.tool === 'Edit' || e.tool === 'Write' || String(e.tool) === 'MultiEdit')) {
+      const file = String(input.file_path ?? '')
+      const edits =
+        e.tool === 'Write'
+          ? [{ before: '', after: String(input.content ?? ''), kind: 'creó' as const }]
+          : e.tool === 'Edit'
+            ? [{ before: String(input.old_string ?? ''), after: String(input.new_string ?? ''), kind: 'editó' as const }]
+            : ((input.edits as { old_string: string; new_string: string }[] | undefined) ?? []).map(x => ({ before: x.old_string, after: x.new_string, kind: 'editó' as const }))
+      const made: Change[] = edits.map(x => ({ at: startedAt, file, kind: x.kind, before: clipChange(x.before), after: clipChange(x.after) }))
+      if (made.length > 0) await update($, changes, list => [...list, ...made].slice(-CHANGES_MAX))
+    }
     if (isMain) await update($, live, l => ({ ...l, running: null, tools: l.tools + 1 }))
 
     if (e.tool === 'TodoWrite' && ran.deny === undefined) {
@@ -332,6 +353,11 @@ export const register: Register = on => {
     const was = await read($, live)
     await update($, live, l => ({ ...l, isWorking: false, running: null }))
 
+    // A long task finished while you may be elsewhere: a system notification says so.
+    if (e.durationMs >= 60_000 && !e.isAborted) {
+      void $.ui.notify(`Terminé en ${duration(e.durationMs)}${was.prompt ? `: ${was.prompt.slice(0, 60)}` : ''}`, { title: 'Claude' }).catch(() => undefined)
+    }
+
     const u = e.usage
     if (u !== undefined) {
       const fresh = u.input_tokens + u.cache_creation_input_tokens
@@ -368,7 +394,7 @@ export const register: Register = on => {
 
   // ── The pane ──
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const { Box, Button, Code, Text } = $.ui.resolve(e)
     // Desktop and mobile draw a real chart; the terminal gets text bars.
     const Svg =
       e.surface === 'desktop' || e.surface === 'mobile'
@@ -406,6 +432,7 @@ export const register: Register = on => {
     const fiveHour = limit('five_hour')
     const week = limit('seven_day')
     const contextPct = usage?.context.percent
+    const budget = (await $.state.get(presupuestoEstado)).value
 
     const header = (
       <Box flexDirection="column">
@@ -445,6 +472,11 @@ export const register: Register = on => {
             <Text dimColor>tokens ahorrados</Text>
           </Text>
           <Text color={guardianOn ? 'success' : 'warning'}>{guardianOn ? '🛡 protegido' : '🛡 en pausa'}</Text>
+          {budget !== undefined && budget.nivel !== 'normal' && (
+            <Text color={budget.nivel === 'critico' ? 'error' : 'warning'} bold>
+              {budget.nivel === 'critico' ? '💰 ahorro máximo' : '💰 modo ahorro'}
+            </Text>
+          )}
         </Box>
         <Box flexDirection="row" columnGap={1} flexWrap="wrap" marginTop={1}>
           {TABS.map(t => (
@@ -506,6 +538,36 @@ export const register: Register = on => {
               </Box>
             )}
           </Section>
+        </Box>
+      )
+    } else if (current === 'cambios') {
+      const list = await read($, changes)
+      const open = await read($, shown)
+      const files = new Set(list.map(c => c.file)).size
+      const recent = list.map((c, i) => ({ c, i })).slice(-10).reverse()
+      body = (
+        <Box flexDirection="column">
+          <Section title={`CAMBIOS  ${list.length} ediciones · ${files} archivos`}>
+            {list.length === 0 && <Text dimColor>Cuando edite o cree archivos, aquí verás cada cambio con el antes (−) y el después (+).</Text>}
+            {recent.map(({ c, i }) => (
+              <Box key={`chg-${i}`} flexDirection="column" marginTop={1}>
+                <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
+                  <Text wrap="truncate-end">
+                    <Text dimColor>{clock(c.at)}</Text> {c.kind === 'creó' ? '🆕' : '✏️'} <Text bold>{c.file.split(/[\\/]/).pop()}</Text>{' '}
+                    <Text dimColor>{c.kind}</Text>
+                  </Text>
+                  <Button key={`chg-btn-${i}`} label={open === i ? 'Ocultar' : 'Ver'} onPress={() => update($, shown, v => (v === i ? null : i))} />
+                </Box>
+                {open === i && <Code source={unifiedDiff(c.file, c.before, c.after)} format="diff" path={c.file} />}
+              </Box>
+            ))}
+            {list.length > 0 && (
+              <Box marginTop={1}>
+                <Button key="chg-clear" plain label="Limpiar lista" onPress={() => update($, changes, () => [])} />
+              </Box>
+            )}
+          </Section>
+          <Text dimColor>Para deshacer: pídeme "deshaz el último cambio de X", o usa /rewind para volver a un punto anterior de la conversación.</Text>
         </Box>
       )
     } else if (current === 'ahorro') {
@@ -695,6 +757,37 @@ export const register: Register = on => {
           what: 'La barra sobre el cuadro de mensaje con el gasto de cada respuesta.',
           action: { label: 'Reiniciar', press: () => $.command.run({ command: 'tokens', args: 'reset' }) },
         },
+        {
+          key: 'presupuesto',
+          on: x.plugins.includes('presupuesto') && ((await $.state.get(presupuestoAuto)).value ?? true),
+          name: 'Presupuesto',
+          what: 'Si tu límite semanal se llena, baja el modelo y pide respuestas más económicas.',
+          stat:
+            budget === undefined
+              ? x.plugins.includes('presupuesto') ? undefined : 'no instalado'
+              : `${budget.nivel === 'normal' ? 'normal' : budget.nivel === 'ahorro' ? 'modo ahorro' : 'ahorro máximo'}${budget.semana !== null ? ` · semana ${Math.round(budget.semana)}%` : ''}`,
+          action: x.plugins.includes('presupuesto')
+            ? (await $.state.get(presupuestoAuto)).value === false
+              ? { label: 'Activar', press: () => $.command.run({ command: 'presupuesto', args: 'on' }) }
+              : { label: 'Apagar', press: () => $.command.run({ command: 'presupuesto', args: 'off' }) }
+            : undefined,
+        },
+        {
+          key: 'traspaso',
+          on: x.plugins.includes('traspaso'),
+          name: 'Traspaso',
+          what: '/guardar resume la charla para seguir en una limpia (/clear) y /retomar la continúa.',
+          stat: x.plugins.includes('traspaso') ? undefined : 'no instalado',
+          action: x.plugins.includes('traspaso') ? { label: 'Guardar ahora', press: () => $.command.run({ command: 'guardar' }) } : undefined,
+        },
+        {
+          key: 'mejorar',
+          on: x.plugins.includes('mejorar-prompt'),
+          name: 'Mejorar pedido',
+          what: '/mejorar <pedido> lo vuelve claro y completo antes de enviarlo.',
+          stat: x.plugins.includes('mejorar-prompt') ? undefined : 'no instalado',
+          action: x.plugins.includes('mejorar-prompt') ? { label: 'Usar', press: () => offer($, '/mejorar ') } : undefined,
+        },
         ...EXTRAS.map(t => ({
           key: t.plugin,
           on: x.plugins.includes(t.plugin),
@@ -742,6 +835,9 @@ export const register: Register = on => {
             <Text>/mods · este panel</Text>
             <Text>/nivel 1-9 · auto · tope N · el modelo</Text>
             <Text>/guardian off · on · protecciones</Text>
+            <Text>/presupuesto · on · off · cuidar el límite</Text>
+            <Text>/guardar · /retomar · seguir en una charla limpia</Text>
+            <Text>/mejorar &lt;pedido&gt; · pedidos claros</Text>
             <Text>/tokens · gasto de la sesión</Text>
             <Text>/caveman · stop caveman · respuestas cortas</Text>
             <Text>/ponytail off · soluciones mínimas</Text>
@@ -765,6 +861,8 @@ export const register: Register = on => {
             <Text dimColor>• Un tema por conversación; para otro, /clear.</Text>
             <Text dimColor>• Para algo delicado (un cliente), sube el nivel o apaga caveman y ponytail.</Text>
             <Text dimColor>• Pide "haz un plan primero" y verás los pasos en la pestaña Ahora.</Text>
+            <Text dimColor>• Charla muy larga: /guardar, luego /clear y /retomar. Sigues igual y gastas mucho menos.</Text>
+            <Text dimColor>• Pedido vago: /mejorar antes de enviarlo te ahorra idas y vueltas.</Text>
           </Section>
         </Box>
       )

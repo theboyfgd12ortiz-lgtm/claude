@@ -36,6 +36,21 @@
       "description": "Muestra tokens, caché, tiempo y herramientas de cada turno; /tokens para el total."
     },
     {
+      "name": "presupuesto",
+      "source": "./mods/presupuesto",
+      "description": "Cuida tu límite de uso: con la semana casi llena baja el modelo y pide respuestas económicas."
+    },
+    {
+      "name": "traspaso",
+      "source": "./mods/traspaso",
+      "description": "/guardar y /retomar: sigue un trabajo largo en una conversación limpia sin perder nada."
+    },
+    {
+      "name": "mejorar-prompt",
+      "source": "./mods/mejorar-prompt",
+      "description": "/mejorar convierte un pedido vago en uno claro antes de enviarlo."
+    },
+    {
       "name": "mods-panel",
       "source": "./mods/mods-panel",
       "description": "Panel /mods: explica cada mod en español y muestra su estado en vivo."

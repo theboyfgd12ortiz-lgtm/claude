@@ -10,7 +10,7 @@ export type PanelExtras = {
   plugins: string[]
 }
 
-export type Tab = 'ahora' | 'ahorro' | 'modelo' | 'mods' | 'ayuda'
+export type Tab = 'ahora' | 'cambios' | 'ahorro' | 'modelo' | 'mods' | 'ayuda'
 
 export type Tone = 'info' | 'ok' | 'warn' | 'bad'
 
@@ -39,6 +39,9 @@ export type HealthCheck = { name: string; isOk: boolean; detail: string; why: st
 /** The last thing the person typed, so the feed shows their words and not added context. */
 export type Asked = { at: number; text: string }
 
+/** One file edit Claude made, kept short, to show as a diff in the Cambios tab. */
+export type Change = { at: number; file: string; kind: 'editó' | 'creó'; before: string; after: string }
+
 declare module 'claude-code' {
   interface PluginState {
     'mods-panel': {
@@ -50,6 +53,8 @@ declare module 'claude-code' {
       history: TurnPoint[]
       health: HealthCheck[] | null
       asked: Asked | null
+      changes: Change[]
+      shown: number | null
     }
   }
 }

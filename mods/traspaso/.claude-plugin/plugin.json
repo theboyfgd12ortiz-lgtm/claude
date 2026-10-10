@@ -1,0 +1,5 @@
+{
+  "name": "traspaso",
+  "description": "/guardar resume la conversación en .claude/traspaso.md para seguir en una limpia (/clear) sin perder nada; /retomar la continúa. Ahorra muchos tokens en trabajos largos.",
+  "author": { "name": "theboyfgd12ortiz-lgtm" }
+}

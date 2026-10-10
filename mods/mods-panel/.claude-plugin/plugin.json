@@ -9,7 +9,8 @@
     "output-trim",
     "quality-coach",
     "token-meter",
-    "selector-modelo"
+    "selector-modelo",
+    "presupuesto"
   ],
   "types": "./types/index.d.ts"
 }

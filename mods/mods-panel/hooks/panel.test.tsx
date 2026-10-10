@@ -155,3 +155,18 @@ test('the install check reports what is missing', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /✓ Node.js/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('the Cambios tab lists each edit and shows its diff', async ($, on) => {
+  mock.clock(on)
+  on('tool.call', { tool: 'Edit' }, () => ({ result: { filePath: '/r/index.html' } }) as never)
+  on('command.list', () => ({ value: [] }) as never)
+  await $.tool.call({ tool: 'Edit', file_path: '/r/index.html', old_string: '<h1>Hola</h1>', new_string: '<h1>Panadería Sol</h1>' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'tab-cambios' })
+  expect(await ui.find({ type: 'Text', text: /1 ediciones · 1 archivos/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /index.html/ })).toBeDefined()
+  await ui.press({ key: 'chg-btn-0' })
+  expect(await ui.find({ type: 'Code' })).toBeDefined()
+  await ui.unmount()
+})

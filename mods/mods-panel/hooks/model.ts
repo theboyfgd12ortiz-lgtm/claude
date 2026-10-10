@@ -191,3 +191,24 @@ export const personText = (text: string): string =>
     .replace(/<(system-reminder|local-command-caveat|local-command-stdout|local-command-stderr|command-name|command-message|command-args)>[\s\S]*?<\/\1>/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+
+export const CHANGES_MAX = 25
+const CLIP = 1500
+
+/** Keeps a change small enough for the panel's state. */
+export const clipChange = (text: string): string => (text.length > CLIP ? `${text.slice(0, CLIP)}\n… (recortado)` : text)
+
+/** A one-hunk unified diff of a change, which the Code element draws coloured. */
+export const unifiedDiff = (file: string, before: string, after: string): string => {
+  const old = before === '' ? [] : before.split('\n')
+  const now = after === '' ? [] : after.split('\n')
+  const name = file.split(/[\\/]/).pop() ?? file
+
+  return [
+    `--- a/${name}`,
+    `+++ b/${name}`,
+    `@@ -${old.length === 0 ? 0 : 1},${old.length} +${now.length === 0 ? 0 : 1},${now.length} @@`,
+    ...old.map(l => `-${l}`),
+    ...now.map(l => `+${l}`),
+  ].join('\n')
+}

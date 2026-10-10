@@ -42,7 +42,10 @@
     "caveman@caveman": true,
     "humanizer@humanizer": true,
     "ponytail@ponytail": true,
-    "token-optimizer@alexgreensh-token-optimizer": true
+    "token-optimizer@alexgreensh-token-optimizer": true,
+    "presupuesto@claude-mods": true,
+    "traspaso@claude-mods": true,
+    "mejorar-prompt@claude-mods": true
   },
   "env": {
     "TOKEN_OPTIMIZER_BASH_COMPRESS": "0",
