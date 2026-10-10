@@ -88,6 +88,30 @@ json.dump(data, open(path, "w"), indent=2)
 PYEOF
 fi
 
+# --- Actualización automática ----------------------------------------------
+# Lo mismo que /plugin → Marketplaces → Enable auto-update, para cada marketplace instalado:
+# Claude Code trae los cambios solo (después del primer mensaje; se aplican en la sesión siguiente).
+KNOWN="$HOME/.claude/plugins/known_marketplaces.json"
+if [ -f "$KNOWN" ]; then
+  if [ -n "$PY" ]; then
+    "$PY" - "$KNOWN" <<'PYEOF' || warn "no pude activar la actualización automática"
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path))
+for name in ("claude-mods", "caveman", "humanizer", "ponytail", "alexgreensh-token-optimizer"):
+    if name in data:
+        data[name]["autoUpdate"] = True
+json.dump(data, open(path, "w"), indent=2)
+PYEOF
+  elif command -v node >/dev/null 2>&1; then
+    node -e '
+      const fs = require("fs"), p = process.argv[1], d = JSON.parse(fs.readFileSync(p, "utf8"));
+      for (const n of ["claude-mods", "caveman", "humanizer", "ponytail", "alexgreensh-token-optimizer"]) if (d[n]) d[n].autoUpdate = true;
+      fs.writeFileSync(p, JSON.stringify(d, null, 2));
+    ' "$KNOWN" || warn "no pude activar la actualización automática"
+  fi
+fi
+
 # --- 3. rtk (programa de terceros, Apache-2.0): lo usa el mod rtk-hook -------
 if [ "${SKIP_RTK:-0}" != "1" ]; then
   export PATH="$HOME/.local/bin:$PATH"

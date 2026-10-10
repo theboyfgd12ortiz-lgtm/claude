@@ -63,6 +63,18 @@ if ($env:SKIP_RTK -ne '1') {
   } catch { Warn "no pude ajustar $SettingsPath" }
 }
 
+# --- Actualización automática: lo mismo que /plugin → Marketplaces → Enable auto-update ---
+$Known = Join-Path $HOME '.claude\plugins\known_marketplaces.json'
+if (Test-Path $Known) {
+  try {
+    $k = Get-Content $Known -Raw | ConvertFrom-Json
+    foreach ($n in @('claude-mods', 'caveman', 'humanizer', 'ponytail', 'alexgreensh-token-optimizer')) {
+      if ($k.PSObject.Properties[$n]) { $k.$n | Add-Member -NotePropertyName autoUpdate -NotePropertyValue $true -Force }
+    }
+    [System.IO.File]::WriteAllText($Known, ($k | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false))
+  } catch { Warn 'no pude activar la actualización automática' }
+}
+
 # --- 3. rtk (programa de terceros, Apache-2.0): lo usa el mod rtk-hook ---
 # El hook de rtk es un script bash: Claude Code en Windows usa Git Bash, que necesita jq y rtk.
 if ($env:SKIP_RTK -ne '1') {

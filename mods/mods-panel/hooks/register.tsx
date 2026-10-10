@@ -1,12 +1,33 @@
-import { atom, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import { atom, read, update } from 'claude-code'
+import type { ElementConstructor, EngineInterface, Register, SvgProps } from 'claude-code'
 
-import type { PanelExtras, RtkInfo } from '../types'
+import type { FeedItem, Live, PanelExtras, RtkInfo, Tab, Tone } from '../types'
+import {
+  bar,
+  CHART_COLORS,
+  chartSvg,
+  clock,
+  describeTool,
+  duration,
+  familyColor,
+  LADDER,
+  parseRtk,
+  percent,
+  planAdd,
+  planFromTodos,
+  planUpdate,
+  pushFeed,
+  pushHistory,
+  short,
+  step,
+} from './model'
+
+export { parseRtk, percent, short } from './model'
 
 const PANE = 'mods-panel'
-const TITLE = 'Mis mods'
+const TITLE = 'Centro de control'
 
-// What each mod publishes ($.state: any plugin reads, only the owner writes).
+// ── What the other mods publish ($.state: any plugin reads, only the owner writes) ──
 const guardianActive = { plugin: 'guardian', key: 'isActive' } as const
 const guardianPaused = { plugin: 'guardian', key: 'isPaused' } as const
 const guardianBlocks = { plugin: 'guardian', key: 'blocks' } as const
@@ -15,40 +36,88 @@ const trimStats = { plugin: 'output-trim', key: 'stats' } as const
 const coachActive = { plugin: 'quality-coach', key: 'isActive' } as const
 const coachStats = { plugin: 'quality-coach', key: 'stats' } as const
 const meterActive = { plugin: 'token-meter', key: 'isActive' } as const
-const meterLast = { plugin: 'token-meter', key: 'last' } as const
 const meterTotal = { plugin: 'token-meter', key: 'total' } as const
-const selectorNivel = { plugin: 'selector-modelo', key: 'nivel' } as const
-const selectorModo = { plugin: 'selector-modelo', key: 'modo' } as const
-const selectorHistorial = { plugin: 'selector-modelo', key: 'historial' } as const
+const selNivel = { plugin: 'selector-modelo', key: 'nivel' } as const
+const selModo = { plugin: 'selector-modelo', key: 'modo' } as const
+const selTope = { plugin: 'selector-modelo', key: 'tope' } as const
+const selHistorial = { plugin: 'selector-modelo', key: 'historial' } as const
+const selUso = { plugin: 'selector-modelo', key: 'uso' } as const
+const selClasificador = { plugin: 'selector-modelo', key: 'clasificador' } as const
 
+// ── The panel's own state ──
 const extrasRef = { plugin: 'mods-panel', key: 'extras' } as const
-const extras = atom(extrasRef, { rtk: null, plugins: [] })
+const extras = atom(extrasRef, { rtk: null, rtkAtStart: null, plugins: [] })
+const tab = atom({ plugin: 'mods-panel', key: 'tab' } as const, 'ahora')
+const feed = atom({ plugin: 'mods-panel', key: 'feed' } as const, [])
+const plan = atom({ plugin: 'mods-panel', key: 'plan' } as const, [])
+const IDLE: Live = { isWorking: false, startedAt: 0, prompt: '', tools: 0, running: null }
+const live = atom({ plugin: 'mods-panel', key: 'live' } as const, IDLE)
+const history = atom({ plugin: 'mods-panel', key: 'history' } as const, [])
 
-/** Turns the output of `rtk --version` and `rtk gain -f json` into what the panel shows. */
-export const parseRtk = (version: string, gain: string): RtkInfo => {
-  let sum: Record<string, number> | undefined
+const TABS: readonly { id: Tab; label: string }[] = [
+  { id: 'ahora', label: 'Ahora' },
+  { id: 'ahorro', label: 'Ahorro' },
+  { id: 'modelo', label: 'Modelo' },
+  { id: 'mods', label: 'Mods' },
+  { id: 'ayuda', label: 'Ayuda' },
+]
+
+/** Third-party plugins the installer adds, as the panel explains them, with a one-press action. */
+export const EXTRAS = [
+  {
+    plugin: 'caveman',
+    title: 'Caveman',
+    what: 'Respuestas cortas, sin relleno.',
+    action: { label: 'Apagar', fill: 'stop caveman' },
+  },
+  {
+    plugin: 'ponytail',
+    title: 'Ponytail',
+    what: 'La solución más simple que funcione.',
+    action: { label: 'Apagar', fill: '/ponytail off' },
+  },
+  {
+    plugin: 'token-optimizer',
+    title: 'Token Optimizer',
+    what: 'Vigila qué llena el contexto y evita releer.',
+    action: { label: 'Ver informe', fill: '/token-optimizer' },
+  },
+  {
+    plugin: 'humanizer',
+    title: 'Humanizer',
+    what: 'Quita lo que suena a IA de un texto.',
+    action: { label: 'Usar', fill: 'Humaniza este texto: ' },
+  },
+] as const
+
+const TONE_COLOR: Record<Tone, string | undefined> = { info: undefined, ok: 'success', warn: 'warning', bad: 'error' }
+
+/** Adds one line to the activity feed. */
+const note = async ($: EngineInterface, icon: string, text: string, tone: Tone = 'info') => {
+  const item: FeedItem = { at: await $.clock.now(), icon, text, tone }
+  await update($, feed, list => pushFeed(list, item))
+}
+
+/** Runs rtk directly (Windows finds rtk.exe on PATH), then through sh with ~/.local/bin added. */
+const runRtk = async ($: EngineInterface, args: string[]) => {
   try {
-    sum = (JSON.parse(gain) as { summary?: Record<string, number> }).summary
+    const direct = await $.process.run(['rtk', ...args], { timeoutMs: 5000 })
+    if (direct.exitCode === 0) return direct
   } catch {
-    sum = undefined
+    // Not on PATH as a plain program; try a shell below.
   }
 
-  return {
-    version: version.trim().replace(/^rtk\s+/, ''),
-    commands: sum?.total_commands ?? 0,
-    saved: sum?.total_saved ?? 0,
-    percent: Math.round(sum?.avg_savings_pct ?? 0),
-  }
+  return $.process.run(['sh', '-c', `PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" rtk ${args.join(' ')}`], {
+    timeoutMs: 5000,
+  })
 }
 
 /** Reads rtk's savings; null when rtk is not installed. */
 const readRtk = async ($: EngineInterface): Promise<RtkInfo | null> => {
   try {
-    const run = (args: string) =>
-      $.process.run(['sh', '-c', `PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" rtk ${args}`], { timeoutMs: 5000 })
-    const v = await run('--version')
+    const v = await runRtk($, ['--version'])
     if (v.exitCode !== 0) return null
-    const g = await run('gain -f json')
+    const g = await runRtk($, ['gain', '-f', 'json'])
 
     return parseRtk(v.stdout, g.exitCode === 0 ? g.stdout : '')
   } catch {
@@ -56,210 +125,531 @@ const readRtk = async ($: EngineInterface): Promise<RtkInfo | null> => {
   }
 }
 
-/** Looks again at the programmes the panel reports on (rtk) and the commands present (caveman). */
-const refresh = async ($: EngineInterface) => {
-  const rtk = await readRtk($)
+/** Plugins that have at least one command or skill loaded, by name. */
+const listPlugins = async ($: EngineInterface): Promise<string[]> => {
   const list = await $.command.list().catch(() => [])
-  const plugins = [...new Set(list.flatMap(c => [c.plugin ?? '', c.name.split(':')[0] ?? '']))].filter(Boolean)
-  await update($, extras, () => ({ rtk, plugins }) satisfies PanelExtras)
+
+  return [...new Set(list.flatMap(c => [c.plugin ?? '', c.name.split(':')[0] ?? '']))].filter(Boolean)
 }
 
-/** Third-party plugins the installer adds, as the panel explains them. */
-export const EXTRAS = [
-  { plugin: 'caveman', title: 'Caveman (respuestas cortas)', what: 'Respondo sin relleno: solo lo necesario y el código exacto. "stop caveman" lo apaga.' },
-  { plugin: 'ponytail', title: 'Ponytail (soluciones simples)', what: 'Busco la solución más corta que funcione, sin código ni abstracciones de más.' },
-  { plugin: 'token-optimizer', title: 'Token Optimizer (auditor)', what: 'Vigila qué llena el contexto y evita releer lo mismo. /token-optimizer da el informe.' },
-  { plugin: 'humanizer', title: 'Humanizer (textos naturales)', what: 'Pídeme "humaniza este texto" y quito lo que suena a IA, sin cambiar lo que dice.' },
-] as const
-
-/** The selector's ladder in short: 1-2 Haiku, 3-5 Sonnet, 6-9 Opus. */
-export const modeloDe = (n: number): string => (n <= 2 ? 'Haiku (barato)' : n <= 5 ? 'Sonnet (equilibrado)' : 'Opus (el más potente)')
-
-/** 1234 -> "1.2k". */
-export const short = (n: number): string =>
-  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n)
-
-export const percent = (part: number, all: number): number => (all === 0 ? 0 : Math.round((part / all) * 100))
-
-/** Everything the panel shows, read in one go. */
-export const snapshot = async ($: EngineInterface) => {
-  const get = async <T,>(p: Promise<{ value?: T; version: number }>) => {
-    const r = await p
-
-    return { value: r.value, isLoaded: r.version > 0 }
+/** Looks again at rtk's counters and the plugins present; reports rtk's savings since last time. */
+const refresh = async ($: EngineInterface) => {
+  const rtk = await readRtk($)
+  const plugins = await listPlugins($)
+  const before = await read($, extras)
+  if (rtk !== null && before.rtk !== null && rtk.saved > before.rtk.saved) {
+    const n = rtk.commands - before.rtk.commands
+    await note($, '⚡', `rtk acortó ${n} comando${n === 1 ? '' : 's'} y ahorró ~${short(rtk.saved - before.rtk.saved)} tokens`, 'ok')
   }
+  await update($, extras, x => ({ rtk, plugins, rtkAtStart: x.rtkAtStart ?? rtk?.saved ?? null }) satisfies PanelExtras)
+}
 
-  return {
-    guardian: {
-      ...(await get($.state.get(guardianActive))),
-      isPaused: (await $.state.get(guardianPaused)).value ?? false,
-      blocks: (await $.state.get(guardianBlocks)).value ?? [],
-    },
-    trim: { ...(await get($.state.get(trimActive))), stats: (await $.state.get(trimStats)).value },
-    coach: { ...(await get($.state.get(coachActive))), stats: (await $.state.get(coachStats)).value },
-    selector: {
-      nivel: (await $.state.get(selectorNivel)).value ?? 4,
-      modo: (await $.state.get(selectorModo)).value ?? 'auto',
-      ultima: ((await $.state.get(selectorHistorial)).value ?? []).at(-1),
-    },
-    // Which mods with a slash command are installed; an empty set if the listing fails.
-    extras: (await $.state.get(extrasRef)).value ?? { rtk: null, plugins: [] },
-    commands: new Set(await $.command.list().then(list => list.map(c => c.name), () => [] as string[])),
-    meter: {
-      ...(await get($.state.get(meterActive))),
-      last: (await $.state.get(meterLast)).value ?? null,
-      total: (await $.state.get(meterTotal)).value,
-    },
-  }
+/** Opens the pane on a tab. */
+const openOn = async ($: EngineInterface, which: Tab | undefined) => {
+  if (which !== undefined) await update($, tab, () => which)
+
+  return $.ui.open({ id: PANE, title: TITLE })
+}
+
+/** Puts text in the prompt box for the person to send (nothing runs by itself). */
+const offer = async ($: EngineInterface, text: string) => {
+  await $.prompt.fill({ text })
+  $.ui.toast('Listo en el cuadro de mensaje: pulsa Enter para enviarlo.')
 }
 
 export const register: Register = on => {
+  // ── Session ──
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'mods', description: 'Abre el panel "Mis mods": qué hace cada mod y su estado' })
-    // Unasked, a pane only shows where the terminal is wide enough to dock it.
+    await $.command.register({
+      name: 'mods',
+      description: 'Abre el Centro de control: actividad, ahorro, modelo y mods',
+      argumentHint: '[ahora | ahorro | modelo | mods | ayuda]',
+    })
     void $.ui.open({ id: PANE, title: TITLE })
     void refresh($)
 
     return next(e)
   })
 
-  // rtk's counters move as commands run; look again when a turn ends.
+  on('command.run', { command: 'mods' }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    const which = TABS.find(t => t.id === arg)?.id
+    const opened = await openOn($, which)
+
+    return { text: opened.isPlaced ? 'Centro de control abierto.' : 'El panel está listo; agranda la ventana para verlo.' }
+  })
+
+  // ── A turn begins: what was asked and which model the selector chose ──
+  on('turn.start', async ($, e, next) => {
+    const at = await $.clock.now()
+    const asked = e.text.replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, '').trim()
+    await update($, live, () => ({ isWorking: true, startedAt: at, prompt: asked.slice(0, 120), tools: 0, running: null }))
+    if (asked !== '') await note($, '💬', `Pediste: ${asked.replace(/\s+/g, ' ').slice(0, 70)}`)
+
+    const choice = ((await $.state.get(selHistorial)).value ?? []).at(-1)
+    if (choice !== undefined && at - choice.hora < 60_000) {
+      const s = step(choice.nivel)
+      await note($, '🧭', `Modelo: ${s.model} (nivel ${choice.nivel}, esfuerzo ${s.effort})${choice.motivo ? ` · ${choice.motivo}` : ''}`)
+    }
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // ── Every tool call: live status, the feed, and Claude's own task list ──
+  on('tool.call', async ($, e, next) => {
+    const input = e as unknown as Record<string, unknown>
+    const isMain = e.agentId === undefined
+    const said = describeTool(e.tool, input)
+    const isPlanTool = e.tool === 'TodoWrite' || e.tool === 'TaskCreate' || e.tool === 'TaskUpdate'
+    const trimBefore = (await $.state.get(trimStats)).value?.trims ?? 0
+    const startedAt = await $.clock.now()
+    if (isMain && !isPlanTool) await update($, live, l => ({ ...l, running: said.text }))
+
+    const ran = await next(e)
+
+    const took = (await $.clock.now()) - startedAt
+    if (isMain) await update($, live, l => ({ ...l, running: null, tools: l.tools + 1 }))
+
+    if (e.tool === 'TodoWrite' && ran.deny === undefined) {
+      const todos = (input.todos as { content: string; status: 'pending' | 'in_progress' | 'completed' }[]) ?? []
+      await update($, plan, () => planFromTodos(todos))
+    } else if (e.tool === 'TaskCreate' && ran.deny === undefined && ran.isError !== true) {
+      const id = (ran.result as { task?: { id?: string } } | undefined)?.task?.id
+      if (id !== undefined) await update($, plan, p => planAdd(p, id, String(input.subject ?? '')))
+    } else if (e.tool === 'TaskUpdate' && ran.deny === undefined && ran.isError !== true) {
+      const change = { status: input.status as 'pending' | 'in_progress' | 'completed' | 'deleted' | undefined, subject: input.subject as string | undefined }
+      await update($, plan, p => planUpdate(p, String(input.taskId ?? ''), change))
+    } else if (ran.deny !== undefined) {
+      const isGuardian = ran.deny.startsWith('guardian:')
+      await note(
+        $,
+        isGuardian ? '🛡' : '⛔',
+        isGuardian ? `Guardián bloqueó: ${ran.deny.replace(/^guardian: (blocked: |not reading [^:]+: )?/, '').split('. ')[0]}` : `No se ejecutó: ${said.text}`,
+        'warn',
+      )
+    } else if (!isPlanTool) {
+      const where = isMain ? '' : ' (subagente)'
+      await note($, ran.isError === true ? '✕' : said.icon, `${said.text}${where} · ${duration(took)}`, ran.isError === true ? 'bad' : 'info')
+    }
+
+    const trimAfter = (await $.state.get(trimStats)).value?.trims ?? 0
+    if (trimAfter > trimBefore) await note($, '✂', 'Salida muy larga recortada (se guardó completa en /tmp)', 'ok')
+
+    return ran
+  }).catch(($, e, next) => next(e))
+
+  // ── A turn ends: cost of the answer, warnings, rtk's savings ──
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (e.agentId === undefined) void refresh($)
+    if (e.agentId !== undefined) return done
+
+    const now = await $.clock.now()
+    const was = await read($, live)
+    await update($, live, l => ({ ...l, isWorking: false, running: null }))
+
+    const u = e.usage
+    if (u !== undefined) {
+      const fresh = u.input_tokens + u.cache_creation_input_tokens
+      await update($, history, h =>
+        pushHistory(h, { at: now, fresh, cached: u.cache_read_input_tokens, written: u.output_tokens, seconds: Math.round(e.durationMs / 1000), model: u.model }),
+      )
+      const all = fresh + u.cache_read_input_tokens
+      await note(
+        $,
+        e.isAborted ? '⏹' : '✅',
+        `${e.isAborted ? 'Detenido' : 'Respuesta lista'} en ${duration(e.durationMs)} · ${was.tools} herramientas · ${short(all)} leídos (${percent(u.cache_read_input_tokens, all)}% caché)`,
+        e.isAborted ? 'warn' : 'ok',
+      )
+    }
+
+    const choice = ((await $.state.get(selHistorial)).value ?? []).at(-1)
+    if (choice !== undefined && choice.final > choice.nivel && now - choice.hora < 3_600_000) {
+      await note($, '📈', `La tarea resultó más difícil: el selector subió del nivel ${choice.nivel} al ${choice.final}`, 'warn')
+    }
+    const warning = (await $.state.get(coachStats)).value?.lastWarning
+    if (warning && was.isWorking) await note($, '⚠', `Calidad: ${warning}`, 'warn')
+
+    void refresh($)
 
     return done
   }).catch(($, e, next) => next(e))
 
-  on('command.run', { command: 'mods' }, async $ => {
-    const opened = await $.ui.open({ id: PANE, title: TITLE })
+  on('session.compact', async ($, e, next) => {
+    const done = await next(e)
+    await note($, '🗜', 'Conversación resumida para liberar espacio')
 
-    return { text: opened.isPlaced ? 'Panel "Mis mods" abierto.' : 'El panel está listo; agranda la ventana para verlo.' }
-  })
+    return done
+  }).catch(($, e, next) => next(e))
 
+  // ── The pane ──
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
-    const s = await snapshot($)
+    // Desktop and mobile draw a real chart; the terminal gets text bars.
+    const Svg =
+      e.surface === 'desktop' || e.surface === 'mobile'
+        ? ($.ui.resolve(e) as unknown as { Svg: ElementConstructor<SvgProps> }).Svg
+        : undefined
+    const width = Math.max(30, e.props.bodyColumns)
+    const current = await read($, tab)
+    const now = await $.clock.now()
 
-    const Head = (p: { name: string; isOn: boolean; label?: string }) => (
-      <Text bold>
-        <Text color={p.isOn ? 'green' : 'gray'}>{p.isOn ? '●' : '○'}</Text> {p.name}{' '}
-        <Text dimColor>{p.label ?? (p.isOn ? 'activo' : 'no instalado')}</Text>
-      </Text>
+    // Shared reads.
+    const stored = await read($, extras)
+    // Before the first refresh (right at start-up) ask for the plugin list directly.
+    const x = stored.plugins.length > 0 ? stored : { ...stored, plugins: await listPlugins($) }
+    const nivel = (await $.state.get(selNivel)).value ?? 4
+    const modo = (await $.state.get(selModo)).value ?? 'auto'
+    const hasSelector = x.plugins.includes('selector-modelo') || (await $.state.get(selNivel)).version > 0
+    const s = step(nivel)
+    const paused = (await $.state.get(guardianPaused)).value ?? false
+    const guardianOn = ((await $.state.get(guardianActive)).value ?? false) && !paused
+    const trim = (await $.state.get(trimStats)).value ?? { trims: 0, savedChars: 0 }
+    const rtkSession = x.rtk !== null && x.rtkAtStart !== null ? Math.max(0, x.rtk.saved - x.rtkAtStart) : 0
+    const savedSession = rtkSession + Math.round(trim.savedChars / 4)
+
+    const Section = (p: { title: string; children?: unknown }) => (
+      <Box flexDirection="column" marginTop={1}>
+        <Text bold>{p.title}</Text>
+        {p.children as never}
+      </Box>
     )
 
-    const g = s.guardian
-    const sel = s.selector
-    const hasSelector = s.commands.has('nivel')
-    const lastBlock = g.blocks[g.blocks.length - 1]
-    const trim = s.trim.stats ?? { trims: 0, savedChars: 0 }
-    const coach = s.coach.stats ?? { codeTurns: 0, verifiedTurns: 0, lastWarning: null }
-    const total = s.meter.total ?? { turns: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tools: 0 }
-    const totalIn = total.input + total.cacheRead + total.cacheWrite
-    const last = s.meter.last
+    // ── Header: three facts at a glance, then the tabs ──
+    const header = (
+      <Box flexDirection="column">
+        <Box flexDirection="row" columnGap={2} flexWrap="wrap">
+          {hasSelector && (
+            <Text>
+              <Text color={familyColor(s.model)} bold>
+                ● {s.model}
+              </Text>{' '}
+              <Text dimColor>nivel {nivel}{modo === 'auto' ? ' auto' : ' fijo'}</Text>
+            </Text>
+          )}
+          <Text>
+            <Text color="success" bold>
+              ↓ {short(savedSession)}
+            </Text>{' '}
+            <Text dimColor>tokens ahorrados</Text>
+          </Text>
+          <Text color={guardianOn ? 'success' : 'warning'}>{guardianOn ? '🛡 protegido' : '🛡 en pausa'}</Text>
+        </Box>
+        <Box flexDirection="row" columnGap={1} flexWrap="wrap" marginTop={1}>
+          {TABS.map(t => (
+            <Button key={`tab-${t.id}`} label={t.label} variant={current === t.id ? 'primary' : 'secondary'} onPress={() => update($, tab, () => t.id)} />
+          ))}
+        </Box>
+      </Box>
+    )
+
+    let body: unknown
+
+    if (current === 'ahora') {
+      const l = await read($, live)
+      const steps = await read($, plan)
+      const items = (await read($, feed)).slice(-12).reverse()
+      const doneSteps = steps.filter(p => p.status === 'completed').length
+      body = (
+        <Box flexDirection="column">
+          <Section title={l.isWorking ? '⏳ TRABAJANDO' : '✓ EN ESPERA'}>
+            {l.isWorking ? (
+              <Box flexDirection="column">
+                <Text wrap="truncate-end">{l.prompt || 'Continuando la tarea'}</Text>
+                <Text dimColor>
+                  {duration(now - l.startedAt)} · {l.tools} herramientas usadas
+                </Text>
+                {l.running !== null && <Text color="suggestion" wrap="truncate-end">→ {l.running}</Text>}
+              </Box>
+            ) : (
+              <Text dimColor>Escribe un mensaje y aquí verás qué hago, paso a paso.</Text>
+            )}
+          </Section>
+
+          {steps.length > 0 && (
+            <Section title={`📋 PLAN  ${doneSteps}/${steps.length}`}>
+              <Text color="success">{bar(doneSteps, steps.length, Math.min(30, width - 4))}</Text>
+              {steps.slice(0, 10).map(p => (
+                <Text
+                  color={p.status === 'in_progress' ? 'suggestion' : undefined}
+                  dimColor={p.status === 'completed'}
+                  strikethrough={p.status === 'completed'}
+                  wrap="truncate-end"
+                >
+                  {p.status === 'completed' ? '✓' : p.status === 'in_progress' ? '▶' : '○'} {p.text}
+                </Text>
+              ))}
+            </Section>
+          )}
+
+          <Section title="ACTIVIDAD">
+            {items.length === 0 && <Text dimColor>Todavía no hay actividad en esta sesión.</Text>}
+            {items.map(i => (
+              <Text color={TONE_COLOR[i.tone]} wrap="truncate-end">
+                <Text dimColor>{clock(i.at)}</Text> {i.icon} {i.text}
+              </Text>
+            ))}
+            {items.length > 0 && (
+              <Box marginTop={1}>
+                <Button key="feed-clear" plain label="Limpiar actividad" onPress={() => update($, feed, () => [])} />
+              </Box>
+            )}
+          </Section>
+        </Box>
+      )
+    } else if (current === 'ahorro') {
+      const hist = await read($, history)
+      const total = (await $.state.get(meterTotal)).value
+      const read_ = total ? total.input + total.cacheRead + total.cacheWrite : 0
+      const last = hist.at(-1)
+      const base = hist.length > 0 ? Math.min(...hist.map(p => p.fresh + p.cached)) : 0
+      body = (
+        <Box flexDirection="column">
+          <Section title="ESTA SESIÓN">
+            <Text>
+              <Text color="success" bold>
+                ~{short(savedSession)}
+              </Text>{' '}
+              tokens que no se gastaron
+            </Text>
+            <Text dimColor>
+              rtk {short(rtkSession)} · recortes {short(Math.round(trim.savedChars / 4))}
+            </Text>
+            {total !== undefined && (
+              <Text dimColor>
+                {total.turns} respuestas · {short(read_)} leídos ({percent(total.cacheRead, read_)}% de caché) · {short(total.output)} escritos
+              </Text>
+            )}
+          </Section>
+
+          <Section title="GASTO POR RESPUESTA">
+            {hist.length === 0 && <Text dimColor>Aparece después de tu primera respuesta.</Text>}
+            {hist.length > 0 && Svg !== undefined && (
+              <Box flexDirection="column">
+                <Svg source={chartSvg(hist, Math.min(420, width * 7))} alt={`Tokens de las últimas ${Math.min(12, hist.length)} respuestas`} />
+                <Text>
+                  <Text color={CHART_COLORS.cached}>■ caché (barato)</Text> <Text color={CHART_COLORS.fresh}>■ nuevo (caro)</Text>{' '}
+                  <Text color={CHART_COLORS.written}>■ escrito</Text>
+                </Text>
+              </Box>
+            )}
+            {hist.length > 0 &&
+              Svg === undefined &&
+              hist.slice(-8).map(p => (
+                <Text wrap="truncate-end">
+                  <Text dimColor>{clock(p.at)}</Text> {bar(p.fresh + p.cached, Math.max(...hist.map(q => q.fresh + q.cached)), 16)} {short(p.fresh + p.cached)}
+                </Text>
+              ))}
+          </Section>
+
+          {last !== undefined && (
+            <Section title="QUÉ SIGNIFICA">
+              <Text dimColor>
+                Cada respuesta relee la conversación. Lo que sale de la caché cuesta ~10 veces menos que lo nuevo.
+              </Text>
+              <Text dimColor>
+                Contexto base: ~{short(base)} tokens por petición (instrucciones, herramientas y plugins).
+              </Text>
+              {percent(last.cached, last.cached + last.fresh) < 50 && (
+                <Text color="warning">
+                  La última respuesta usó poca caché: pasa al cambiar de modelo o tras una pausa larga.
+                </Text>
+              )}
+              <Text dimColor>Consejo: si cambias de tema, escribe /clear; si la charla es larga, /compact.</Text>
+            </Section>
+          )}
+        </Box>
+      )
+    } else if (current === 'modelo') {
+      const tope = (await $.state.get(selTope)).value ?? 9
+      const hist = ((await $.state.get(selHistorial)).value ?? []).slice(-6).reverse()
+      const uso = (await $.state.get(selUso)).value
+      const clas = (await $.state.get(selClasificador)).value
+      const ultima = hist[0]
+      const calls = uso ? uso.haiku.llamadas + uso.sonnet.llamadas + uso.opus.llamadas : 0
+      body = !hasSelector ? (
+        <Section title="SELECTOR DE MODELO">
+          <Text dimColor>No está instalado. Corre el instalador para tenerlo.</Text>
+        </Section>
+      ) : (
+        <Box flexDirection="column">
+          <Section title={`NIVEL ${nivel} DE 9 · ${s.name.toUpperCase()}`}>
+            <Text>
+              <Text color={familyColor(s.model)} bold>
+                {s.model}
+              </Text>{' '}
+              · esfuerzo {s.effort} · {modo === 'auto' ? 'automático' : 'fijado a mano'}
+              {tope < 9 ? ` · tope ${tope}` : ''}
+            </Text>
+            <Box flexDirection="row" columnGap={0} flexWrap="wrap" marginTop={1}>
+              {LADDER.map(r => (
+                <Button
+                  key={`lvl-${r.n}`}
+                  label={` ${r.n} `}
+                  variant={r.n === nivel ? 'primary' : 'secondary'}
+                  onPress={() => $.command.run({ command: 'nivel', args: String(r.n) })}
+                />
+              ))}
+            </Box>
+            <Text dimColor>1-2 Haiku (barato) · 3-5 Sonnet · 6-9 Opus (el mejor)</Text>
+            <Box flexDirection="row" columnGap={1} flexWrap="wrap" marginTop={1}>
+              <Button key="sel-auto" label="Automático" variant={modo === 'auto' ? 'primary' : 'secondary'} onPress={() => $.command.run({ command: 'nivel', args: 'auto' })} />
+              <Button key="sel-tope-down" label="Tope −" onPress={() => $.command.run({ command: 'nivel', args: `tope ${Math.max(1, tope - 1)}` })} />
+              <Button key="sel-tope-up" label="Tope +" onPress={() => $.command.run({ command: 'nivel', args: `tope ${Math.min(9, tope + 1)}` })} />
+            </Box>
+            <Text dimColor>Tocar un número lo fija a mano; "Automático" deja que elija solo. El tope es el nivel máximo que puede usar.</Text>
+          </Section>
+
+          {ultima !== undefined && (
+            <Section title="ÚLTIMA DECISIÓN">
+              <Text wrap="truncate-end">"{ultima.texto}"</Text>
+              <Text dimColor>Por qué: {ultima.motivo || 'sin motivo'}</Text>
+              {ultima.puntos && (
+                <Text dimColor wrap="truncate-end">
+                  trabajo {bar(ultima.puntos.alcance, 3, 3)} pensar {bar(ultima.puntos.razonamiento, 3, 3)} riesgo {bar(ultima.puntos.riesgo, 3, 3)} acabado{' '}
+                  {bar(ultima.puntos.calidad, 3, 3)}
+                </Text>
+              )}
+            </Section>
+          )}
+
+          {uso !== undefined && calls > 0 && (
+            <Section title="REPARTO DE ESTA SESIÓN">
+              {(['haiku', 'sonnet', 'opus'] as const).map(f => (
+                <Text>
+                  <Text color={familyColor(f === 'haiku' ? 'Haiku' : f === 'sonnet' ? 'Sonnet' : 'Opus')}>
+                    {(f === 'haiku' ? 'Haiku ' : f === 'sonnet' ? 'Sonnet' : 'Opus  ') + ' ' + bar(uso[f].llamadas, calls, 12)}
+                  </Text>{' '}
+                  <Text dimColor>
+                    {uso[f].llamadas} · {short(uso[f].entrada + uso[f].salida)} tokens
+                  </Text>
+                </Text>
+              ))}
+              {clas !== undefined && <Text dimColor>Decidir costó {short(clas.tokens)} tokens en {clas.consultas} consultas.</Text>}
+            </Section>
+          )}
+
+          {hist.length > 0 && (
+            <Section title="ÚLTIMOS PEDIDOS">
+              {hist.map(d => (
+                <Text wrap="truncate-end">
+                  <Text color={familyColor(step(d.final).model)}>
+                    {d.final} {step(d.final).model.padEnd(6)}
+                  </Text>{' '}
+                  {d.texto}
+                  {d.final > d.nivel ? ' ↑' : ''}
+                </Text>
+              ))}
+            </Section>
+          )}
+        </Box>
+      )
+    } else if (current === 'mods') {
+      const blocks = (await $.state.get(guardianBlocks)).value ?? []
+      const coach = (await $.state.get(coachStats)).value ?? { codeTurns: 0, verifiedTurns: 0, lastWarning: null }
+      const rows: { key: string; on: boolean; name: string; what: string; stat?: string; action?: { label: string; press: () => unknown } }[] = [
+        {
+          key: 'guardian',
+          on: guardianOn,
+          name: 'Guardián',
+          what: 'Bloquea borrados masivos, push forzados y lectura de contraseñas.',
+          stat: `${blocks.length} bloqueos${blocks.at(-1) ? ` · último: ${blocks.at(-1)?.why}` : ''}`,
+          action: { label: paused ? 'Reactivar' : 'Pausar', press: () => $.command.run({ command: 'guardian', args: paused ? 'on' : 'off' }) },
+        },
+        {
+          key: 'rtk',
+          on: x.rtk !== null,
+          name: 'rtk',
+          what: 'git, ls, grep y tests me devuelven solo lo importante.',
+          stat: x.rtk !== null ? `${x.rtk.commands} comandos · ~${short(x.rtk.saved)} tokens (${x.rtk.percent}%) en total` : 'no instalado: corre el instalador (instala rtk y jq)',
+        },
+        {
+          key: 'trim',
+          on: (await $.state.get(trimActive)).value ?? false,
+          name: 'Recorte de salidas',
+          what: 'Si una salida es enorme, me pasa solo el inicio y el final.',
+          stat: `${trim.trims} recortes`,
+        },
+        {
+          key: 'coach',
+          on: (await $.state.get(coachActive)).value ?? false,
+          name: 'Control de calidad',
+          what: 'Me recuerda probar el código antes de decir "listo".',
+          stat: `${coach.verifiedTurns}/${coach.codeTurns} cambios verificados`,
+        },
+        {
+          key: 'meter',
+          on: (await $.state.get(meterActive)).value ?? false,
+          name: 'Medidor de tokens',
+          what: 'La barra sobre el cuadro de mensaje con el gasto de cada respuesta.',
+          action: { label: 'Reiniciar', press: () => $.command.run({ command: 'tokens', args: 'reset' }) },
+        },
+        ...EXTRAS.map(t => ({
+          key: t.plugin,
+          on: x.plugins.includes(t.plugin),
+          name: t.title,
+          what: t.what,
+          stat: x.plugins.includes(t.plugin) ? undefined : t.plugin === 'token-optimizer' ? 'no instalado: necesita Python 3' : 'no instalado',
+          action: x.plugins.includes(t.plugin) ? { label: t.action.label, press: () => offer($, t.action.fill) } : undefined,
+        })),
+      ]
+      const active = rows.filter(r => r.on).length
+      body = (
+        <Box flexDirection="column">
+          <Section title={`MODS  ${active}/${rows.length} activos`}>
+            {rows.map(r => (
+              <Box key={`row-${r.key}`} flexDirection="column" marginTop={1}>
+                <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
+                  <Text bold>
+                    <Text color={r.on ? 'success' : 'inactive'}>{r.on ? '●' : '○'}</Text> {r.name}
+                  </Text>
+                  {r.action !== undefined && <Button key={`act-${r.key}`} label={r.action.label} onPress={r.action.press} />}
+                </Box>
+                <Text dimColor>{r.what}</Text>
+                {r.stat !== undefined && <Text color={r.on ? undefined : 'warning'}>{r.stat}</Text>}
+              </Box>
+            ))}
+          </Section>
+        </Box>
+      )
+    } else {
+      body = (
+        <Box flexDirection="column">
+          <Section title="COMANDOS">
+            <Text>/mods · este panel</Text>
+            <Text>/nivel 1-9 · auto · tope N · el modelo</Text>
+            <Text>/guardian off · on · protecciones</Text>
+            <Text>/tokens · gasto de la sesión</Text>
+            <Text>/caveman · stop caveman · respuestas cortas</Text>
+            <Text>/ponytail off · soluciones mínimas</Text>
+            <Text>/token-optimizer · informe de contexto</Text>
+          </Section>
+          <Section title="PALABRAS">
+            <Text>
+              <Text bold>Token:</Text> <Text dimColor>unos ¾ de palabra. Se paga lo que leo y lo que escribo.</Text>
+            </Text>
+            <Text>
+              <Text bold>Caché:</Text> <Text dimColor>lo que ya leí hace poco; releerlo cuesta ~10 veces menos.</Text>
+            </Text>
+            <Text>
+              <Text bold>Contexto:</Text> <Text dimColor>todo lo que tengo presente: la charla, archivos y resultados.</Text>
+            </Text>
+            <Text>
+              <Text bold>Nivel:</Text> <Text dimColor>qué tan potente es el modelo; más alto, mejor y más caro.</Text>
+            </Text>
+          </Section>
+          <Section title="TRUCOS">
+            <Text dimColor>• Un tema por conversación; para otro, /clear.</Text>
+            <Text dimColor>• Para algo delicado (un cliente), sube el nivel o apaga caveman y ponytail.</Text>
+            <Text dimColor>• Pide "haz un plan primero" y verás los pasos en la pestaña Ahora.</Text>
+          </Section>
+        </Box>
+      )
+    }
 
     return (
-      <Box flexDirection="column" gap={1}>
-        <Box flexDirection="column">
-          <Head name="Guardián" isOn={g.isLoaded && !g.isPaused} label={g.isLoaded ? (g.isPaused ? 'EN PAUSA' : 'activo') : undefined} />
-          <Text dimColor>Evita desastres: no deja borrar todo el disco, forzar un push ni leer tus contraseñas (.env).</Text>
-          {g.isLoaded && (
-            <Text>
-              Bloqueos en esta sesión: {g.blocks.length}
-              {lastBlock !== undefined && <Text dimColor> · último: {lastBlock.why}</Text>}
-            </Text>
-          )}
-          {g.isLoaded && (
-            <Button
-              key="guardian-toggle"
-              label={g.isPaused ? 'Reactivar guardián' : 'Pausar guardián'}
-              onPress={() => $.command.run({ command: 'guardian', args: g.isPaused ? 'on' : 'off' })}
-            />
-          )}
-        </Box>
-
-        <Box flexDirection="column">
-          <Head name="Recorte de salidas" isOn={s.trim.isLoaded} />
-          <Text dimColor>Si un comando imprime muchísimo texto, me pasa solo el principio y el final. Ahorra tokens.</Text>
-          {s.trim.isLoaded && (
-            <Text>
-              Recortes: {trim.trims} · ahorro aprox.: {short(Math.round(trim.savedChars / 4))} tokens
-            </Text>
-          )}
-        </Box>
-
-        <Box flexDirection="column">
-          <Head name="Control de calidad" isOn={s.coach.isLoaded} />
-          <Text dimColor>Me recuerda probar el código (tests, lint, build) antes de decirte "listo".</Text>
-          {s.coach.isLoaded && (
-            <Text>
-              Turnos con cambios de código: {coach.codeTurns} · verificados: {coach.verifiedTurns} (
-              {percent(coach.verifiedTurns, coach.codeTurns)}%)
-            </Text>
-          )}
-          {coach.lastWarning !== null && <Text color="yellow">Último aviso: {coach.lastWarning}</Text>}
-        </Box>
-
-        <Box flexDirection="column">
-          <Head name="Medidor de tokens" isOn={s.meter.isLoaded} />
-          <Text dimColor>Cuenta cuánto gasta cada respuesta. La caché es texto reutilizado: cuanto más alto el %, más barato.</Text>
-          {s.meter.isLoaded && (
-            <Text>
-              Sesión: {total.turns} respuestas · {short(totalIn)} leídos ({percent(total.cacheRead, totalIn)}% caché) ·{' '}
-              {short(total.output)} escritos
-            </Text>
-          )}
-          {last !== null && (
-            <Text dimColor>
-              Última respuesta: {short(last.input + last.cacheRead + last.cacheWrite)} leídos · {short(last.output)} escritos ·{' '}
-              {last.seconds}s · modelo {last.model}
-            </Text>
-          )}
-        </Box>
-
-        <Box flexDirection="column">
-          <Head name="rtk (comandos más cortos)" isOn={s.extras.rtk !== null} label={s.extras.rtk === null ? 'no instalado' : `versión ${s.extras.rtk.version}`} />
-          <Text dimColor>Cuando corro git, ls, grep o tests, rtk me entrega solo lo importante en vez de todo el texto.</Text>
-          {s.extras.rtk !== null && (
-            <Text>
-              Comandos acortados: {s.extras.rtk.commands} · ahorro aprox.: {short(s.extras.rtk.saved)} tokens ({s.extras.rtk.percent}%)
-            </Text>
-          )}
-        </Box>
-
-        {EXTRAS.map(x => (
-          <Box flexDirection="column">
-            <Head name={x.title} isOn={s.extras.plugins.includes(x.plugin)} />
-            <Text dimColor>{x.what}</Text>
-          </Box>
-        ))}
-
-        <Box flexDirection="column">
-          <Head name="Selector de modelos" isOn={hasSelector} label={hasSelector ? (sel.modo === 'auto' ? 'automático' : 'fijo a mano') : undefined} />
-          <Text dimColor>Elige solo qué tan potente (y caro) es el modelo para cada pedido: 1 = barato y rápido, 9 = máximo.</Text>
-          {hasSelector && (
-            <Text>
-              Ahora: nivel {sel.nivel} de 9 · {modeloDe(sel.nivel)}
-            </Text>
-          )}
-          {hasSelector && sel.ultima !== undefined && (
-            <Text dimColor>
-              Último pedido → nivel {sel.ultima.final}
-              {sel.ultima.motivo ? ` · por qué: ${sel.ultima.motivo}` : ''}
-            </Text>
-          )}
-          {hasSelector && (
-            <Box flexDirection="row" columnGap={1} flexWrap="wrap">
-              <Button key="sel-auto" label="Automático" variant={sel.modo === 'auto' ? 'primary' : 'secondary'} onPress={() => $.command.run({ command: 'nivel', args: 'auto' })} />
-              <Button key="sel-down" label="Más barato" onPress={() => $.command.run({ command: 'nivel', args: String(Math.max(1, sel.nivel - 1)) })} />
-              <Button key="sel-up" label="Más potente" onPress={() => $.command.run({ command: 'nivel', args: String(Math.min(9, sel.nivel + 1)) })} />
-              <Button key="sel-open" label="Ver detalle" onPress={() => $.command.run({ command: 'nivel' })} />
-            </Box>
-          )}
-        </Box>
-
-        <Text dimColor>Comandos: /mods este panel · /nivel selector · /guardian off|on · /tokens totales · /caveman · /token-optimizer</Text>
-        <Text dimColor>Token ≈ ¾ de palabra. "Leídos" = lo que reviso para responder; "escritos" = lo que genero.</Text>
+      <Box flexDirection="column" paddingX={1}>
+        {header}
+        {body as never}
       </Box>
     )
   })

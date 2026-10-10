@@ -271,6 +271,12 @@ async function ponerTope($: EngineInterface, pedido: number) {
 }
 
 async function abrirPanel($: EngineInterface) {
+  // Con el Centro de control instalado, todo se ve ahí (pestaña Modelo); si no, el panel propio.
+  const comandos = await $.command.list().catch(() => [])
+  if (comandos.some(c => c.name === 'mods')) {
+    await $.command.run({ command: 'mods', args: 'modelo' })
+    return
+  }
   await $.ui.open({ id: PANEL, title: 'Selector de modelo', rows: 24, columns: 64 })
 }
 

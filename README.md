@@ -16,7 +16,7 @@ Mods para Claude Code que eligen el modelo justo, recortan lo que gasta tokens, 
 | **quality-coach** | Cinco reglas de trabajo en el prompt de sistema, aviso si se editó código sin probarlo, y mejores resúmenes al compactar. | ✅ | ✅✅✅ |
 | **guardian** | Bloquea `rm -rf /` o `~`, `git push --force`, formatear discos y leer `.env`, llaves privadas o credenciales. `/guardian off` lo pausa. | — | ✅✅ |
 | **token-meter** | Barra con tokens, % de caché, tiempo y herramientas del último turno; `/tokens` da el total. | ✅ (te deja ver el gasto) | — |
-| **mods-panel** | El panel `/mods`, con botones para pausar el guardián o cambiar el nivel del modelo. | — | — |
+| **mods-panel** | El **Centro de control** (`/mods`): qué estoy haciendo en vivo, el plan con avances, cuánto se ahorra (con gráfico), el modelo con botones 1-9, y todos los mods con su botón. | — | — |
 
 `rtk`, `caveman`, `ponytail`, `token-optimizer` y `humanizer` son proyectos de terceros. No están copiados aquí: el instalador los baja de su repositorio original, así recibes sus arreglos. De rtk solo viaja, tal cual, el script del hook (`mods/rtk-hook/`, con su licencia).
 
@@ -54,23 +54,30 @@ Si aun así quieres probarlo: corre el instalador con `WITH_HEADROOM=1` (PowerSh
 
 ## Que se actualice solo
 
-- **Los mods de este repo:** no llevan número de versión a propósito, así que Claude Code los considera nuevos con cada commit. Solo falta activar la actualización automática: en Claude Code escribe `/plugin`, entra en **Marketplaces** y, en cada uno (`claude-mods`, `caveman`, `ponytail`, `humanizer`, `alexgreensh-token-optimizer`), pulsa **Enable auto-update**. Desde ahí, al abrir sesión se traen los cambios.
-- **A mano, cuando quieras:** vuelve a correr el script de instalación (no duplica nada), o `claude plugin marketplace update claude-mods`.
-- **rtk** (el programa) no se actualiza solo: el script instala la versión probada (`v0.49.0`). Para subirla, corre el script con `RTK_VERSION=vX.Y.Z`, o cambia el valor por defecto en `scripts/install-mods.sh`.
+El instalador deja activada la actualización automática de todos los marketplaces. Es lo mismo que `/plugin` → **Marketplaces** → **Enable auto-update**, pero ya hecho. Desde ahí:
+
+- **Cuándo llegan los cambios:** después de tu primer mensaje en una sesión, Claude Code busca versiones nuevas (tarda hasta 10 minutos) y las aplica en la sesión siguiente, o al instante con `/reload-plugins`.
+- **Los mods de este repo** no llevan número de versión a propósito: cada commit cuenta como versión nueva.
+- **Si quieres forzar una actualización**, vuelve a correr el instalador. No duplica nada.
+- **rtk (el programa) no se actualiza solo.** El script instala la versión probada, `v0.49.0`. Para subirla, corre el script con `RTK_VERSION=vX.Y.Z`.
 
 ## En la nube (claude.ai/code)
 
-En el entorno (menú del entorno → *Edit* → *Setup script*) pega:
+Una sesión en la nube **no** instala los plugins que el repo declara en `.claude/settings.json`, ni los que tienes en tu PC: arranca en una máquina limpia. Así lo dice la documentación oficial, y por eso al principio no veías nada. Hay dos formas de tenerlos ahí:
+
+**1. Script de inicio del entorno (recomendado, instala todo, incluido rtk).** En claude.ai/code abre el menú del entorno (arriba, donde dice *Default*), luego **Edit** y luego **Setup script**. Pega esto y guarda:
 
 ```
 git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/claude-mods && bash /tmp/claude-mods/scripts/install-mods.sh
 ```
 
-Además, `.claude/settings.json` de este repo activa los mods en cualquier sesión que lo abra.
+El script corre antes de que arranque Claude, en cada sesión **nueva**. La nube guarda una copia del resultado unos 7 días, así que las siguientes sesiones arrancan rápido. Una sesión que ya estaba abierta no cambia: abre una nueva.
+
+**2. Desde tu cuenta de claude.ai (sin script, sirve en la nube y en tu PC).** En claude.ai entra a **Customize** → **Plugins** → **Add** → **Add marketplace** y escribe `theboyfgd12ortiz-lgtm/claude`. Repite con `JuliusBrussee/caveman`, `DietrichGebert/ponytail`, `blader/humanizer` y `alexgreensh/token-optimizer`, activa los plugins y la opción **Sync automatically**. Quedan en tu cuenta y se descargan solos en cada sesión. Lo que esta forma no instala es el programa rtk; para eso hace falta la opción 1.
 
 ## Comandos
 
-- `/mods`: el panel "Mis mods".
+- `/mods [ahora | ahorro | modelo | mods | ayuda]`: el Centro de control, en la pestaña que digas.
 - `/nivel [auto | 1-9 | tope N]`: el selector de modelo.
 - `/guardian [off | on]`: pausa o reactiva las protecciones.
 - `/tokens [show | hide | reset]`: totales de la sesión.
