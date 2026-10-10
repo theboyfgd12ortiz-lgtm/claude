@@ -63,17 +63,25 @@ El instalador deja activada la actualización automática de todos los marketpla
 
 ## En la nube (claude.ai/code)
 
-Una sesión en la nube **no** instala los plugins que el repo declara en `.claude/settings.json`, ni los que tienes en tu PC: arranca en una máquina limpia. Así lo dice la documentación oficial, y por eso al principio no veías nada. Hay dos formas de tenerlos ahí:
+Una sesión en la nube arranca en una máquina limpia: **no** instala los plugins de tu PC ni los que el repo declara en `.claude/settings.json` (lo dice la documentación oficial). Por eso hace falta un script de inicio en el entorno.
 
-**1. Script de inicio del entorno (recomendado, instala todo, incluido rtk).** En claude.ai/code abre el menú del entorno (arriba, donde dice *Default*), luego **Edit** y luego **Setup script**. Pega esto y guarda:
+**1. Pega el script de inicio.** En claude.ai/code abre el menú del entorno (arriba, donde dice *Default*), pulsa **Edit**, busca **Setup script**, pega esta línea y guarda:
 
 ```
-git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/claude-mods && bash /tmp/claude-mods/scripts/install-mods.sh
+git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/cm && bash /tmp/cm/scripts/cloud-setup.sh 2>&1 | tee /tmp/claude-mods-setup.log
 ```
 
-El script corre antes de que arranque Claude, en cada sesión **nueva**. La nube guarda una copia del resultado unos 7 días, así que las siguientes sesiones arrancan rápido. Una sesión que ya estaba abierta no cambia: abre una nueva.
+Baja los mods y los plugins de terceros a `/opt/claude-mods`, instala rtk y le dice a Claude Code que los cargue desde ahí (`CLAUDE_CODE_PLUGIN_DIRS`). No usa marketplaces. Tarda unos 10 segundos.
 
-**2. Desde tu cuenta de claude.ai (sin script, sirve en la nube y en tu PC).** En claude.ai entra a **Customize** → **Plugins** → **Add** → **Add marketplace** y escribe `theboyfgd12ortiz-lgtm/claude`. Repite con `JuliusBrussee/caveman`, `DietrichGebert/ponytail`, `blader/humanizer` y `alexgreensh/token-optimizer`, activa los plugins y la opción **Sync automatically**. Quedan en tu cuenta y se descargan solos en cada sesión. Lo que esta forma no instala es el programa rtk; para eso hace falta la opción 1.
+**2. Abre una sesión nueva.** Las sesiones que ya estaban abiertas no cambian. La nube guarda el resultado unos 7 días y lo rehace si cambias el script.
+
+**3. Comprueba que funcionó.** En la sesión nueva escribe `/mods`. Si no aparece nada, pídeme: "lee /tmp/claude-mods-setup.log y dime qué falló". Ese archivo lista cada mod con `loaded` si cargó, y las líneas `AVISO` dicen qué no se pudo bajar.
+
+Para actualizar, abre una sesión nueva después de cambiar el script o espera a que la nube rehaga su copia. Con el comando `git pull` dentro de `/opt/claude-mods/claude` también se actualiza.
+
+**Lo que se ve en la nube.** La documentación oficial dice que los mods *funcionan* en una sesión en la nube (guardián, selector de modelo, recortes) pero que el panel solo se dibuja en la terminal y en la app de escritorio, no en el navegador de claude.ai/code. Si abres la sesión en el navegador, los mods trabajan aunque no veas el Centro de control.
+
+*Alternativa:* también puedes añadir `theboyfgd12ortiz-lgtm/claude` en claude.ai → **Customize → Plugins → Add → Add marketplace**. Si te da "No se pudo añadir el mercado", no insistas: usa el script de arriba.
 
 ## Comandos
 
