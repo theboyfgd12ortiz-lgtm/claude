@@ -12,7 +12,8 @@ test('un agente sin modelo propio recibe uno más barato que el director', () =>
   const base = { pedido: undefined, padre: 'claude-opus-5-5', fork: false }
   expect(modeloParaAgente({ ...base, tipo: 'Explore' })).toBe('haiku')
   expect(modeloParaAgente({ ...base, tipo: 'equipo:obrero' })).toBe('sonnet')
-  expect(modeloParaAgente({ ...base, tipo: 'general-purpose' })).toBe('sonnet')
+  expect(modeloParaAgente({ ...base, tipo: 'general-purpose' })).toBeUndefined()
+  expect(modeloParaAgente({ ...base, tipo: 'equipo:obrero', padre: 'claude-haiku-5-5' })).toBe('claude-haiku-5-5')
 })
 
 test('no toca lo que ya eligió alguien, ni bifurcaciones, ni directores igual de baratos', () => {
@@ -20,7 +21,6 @@ test('no toca lo que ya eligió alguien, ni bifurcaciones, ni directores igual d
   expect(modeloParaAgente({ ...base, tipo: 'Explore', pedido: 'opus' })).toBeUndefined()
   expect(modeloParaAgente({ ...base, tipo: 'Explore', fork: true })).toBeUndefined()
   expect(modeloParaAgente({ ...base, tipo: 'otro-tipo' })).toBeUndefined()
-  expect(modeloParaAgente({ ...base, tipo: 'equipo:obrero', padre: 'claude-haiku-5-5' })).toBeUndefined()
   expect(modeloParaAgente({ ...base, tipo: 'equipo:obrero', padre: 'claude-sonnet-5-5' })).toBeUndefined()
 })
 

@@ -494,18 +494,6 @@ export const register: Register = on => {
       sections: [
         ...r.sections,
         {
-          id: 'selector-modelo:reparto',
-          scope: 'session',
-          text: `# Reparto de modelos para ahorrar tokens
-Cuando una tarea se divida en partes y lances subagentes (herramienta Agent), elige el modelo y esfuerzo de cada uno según su parte, no el tuyo:
-- Buscar, leer o resumir archivos, cambios mecánicos, comandos: model "haiku", effort "low".
-- Editar un archivo con instrucciones claras, pruebas sencillas: model "sonnet", effort "low".
-- Programar una función, arreglar un bug acotado, revisar código: model "sonnet", effort "medium".
-- Varias piezas que deben encajar, bug que no es obvio: model "sonnet", effort "high".
-- Diseño, arquitectura, depuración difícil, decisiones de calidad final: model "opus", effort "high".
-No uses opus para trabajo mecánico. Pocos agentes y bien repartidos.`,
-        },
-        {
           id: 'selector-modelo:ahorro',
           scope: 'session',
           text: `# Hábitos para ahorrar tokens (siempre, sin que te lo pidan)
@@ -519,8 +507,7 @@ Leer y buscar:
 - Edita con Edit (solo el trozo que cambia), no reescribas archivos enteros.
 Cuándo usar un subagente y cuándo no:
 - Hazlo tú mismo si es corto: pocos archivos, un cambio puntual, una respuesta.
-- Usa un subagente (Explore, con model "haiku") cuando haya que barrer muchos archivos o leer salidas largas y solo necesites la conclusión: así esas lecturas no llenan esta conversación.
-- Varias partes independientes y grandes: máximo 2 o 3 subagentes, cada uno con el modelo más barato que sirva.
+- Usa un subagente (equipo:explorador) cuando haya que barrer muchos archivos o leer salidas largas y solo necesites la conclusión. Para repartir trabajo grande sigue la guía "Equipo de trabajo".
 Cuándo usar un hook:
 - Si algo se repite igual cada vez (formatear, avisar, revisar un comando), propón un hook en settings.json con la skill update-config en vez de hacerlo a mano en cada turno.
 Contexto y caché:

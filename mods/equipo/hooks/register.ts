@@ -36,9 +36,6 @@ const guardar = async ($: EngineInterface, i: Investigacion): Promise<string> =>
 }
 
 export const register: Register = on => {
-  // Agente que corresponde a la investigación en curso.
-  let investigadorId: string | undefined
-
   on('session.start', async ($, e, next) => {
     for (const spec of AGENTES) await $.agent.register(spec).catch(() => undefined)
     await $.command.register({
@@ -48,8 +45,8 @@ export const register: Register = on => {
     })
     await $.command.register({
       name: 'investigar',
-      description: 'Investiga en internet con un agente barato: /investigar <pregunta> · guardar',
-      argumentHint: '<pregunta> | guardar',
+      description: 'Investiga en internet con un agente barato: /investigar <pregunta> · ver · guardar',
+      argumentHint: '<pregunta> | ver | guardar',
     })
     if ((await $.store.get('isAuto').catch(() => undefined)) === false) await update($, isAuto, () => false)
 
@@ -66,9 +63,10 @@ export const register: Register = on => {
 
   // 2. Un agente sin modelo propio corre con el más barato que sirva.
   on('agent.spawn', async ($, e, next) => {
-    const objetivo = (await read($, isAuto))
-      ? modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: e.parentModel, fork: e.subagentType === 'fork' })
-      : undefined
+    const objetivo =
+      e.fork || e.isTeammate === true || e.workflow !== undefined || !(await read($, isAuto))
+        ? undefined
+        : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: e.parentModel, fork: false })
     const lanzado = await next(objetivo === undefined ? e : { ...e, model: objetivo })
     if (lanzado.deny !== undefined || lanzado.agentId === undefined) return lanzado
 
@@ -108,15 +106,13 @@ export const register: Register = on => {
         ),
       )
     }
-    if (e.reason === 'answer') {
-      const fin = await $.clock.now()
-      await update($, agentes, l => l.map(r => (r.id === id ? { ...r, estado: 'listo' as const, fin } : r)))
-      if (id === investigadorId) {
-        investigadorId = undefined
-        const texto = typeof e.answer === 'string' ? e.answer.trim() : ''
-        await update($, investigacion, v => (v === null ? v : { ...v, estado: texto === '' ? ('fallo' as const) : ('listo' as const), texto }))
-        $.ui.toast(texto === '' ? 'equipo: la investigación no devolvió nada.' : 'equipo: investigación lista. Míralo en /mods → Web.')
-      }
+    const fin = await $.clock.now()
+    await update($, agentes, l => l.map(r => (r.id === id ? { ...r, estado: 'listo' as const, fin } : r)))
+    const actual = await read($, investigacion)
+    if (actual !== null && actual.estado === 'trabajando' && actual.id === id) {
+      const texto = e.reason === 'answer' && typeof e.answer === 'string' ? e.answer.trim() : ''
+      await update($, investigacion, v => (v === null ? v : { ...v, estado: texto === '' ? ('fallo' as const) : ('listo' as const), texto }))
+      $.ui.toast(texto === '' ? 'equipo: la investigación no devolvió nada.' : 'equipo: investigación lista. Escribe /investigar ver para leerla.')
     }
 
     return done
@@ -135,7 +131,14 @@ export const register: Register = on => {
 
   on('command.run', { command: 'investigar' }, async ($, e) => {
     const arg = e.args.trim()
-    if (arg === '') return { text: 'Uso: /investigar <qué quieres saber> · /investigar guardar' }
+    if (arg === '') return { text: 'Uso: /investigar <qué quieres saber> · ver · guardar' }
+
+    if (arg.toLowerCase() === 'ver') {
+      const v = await read($, investigacion)
+      if (v === null) return { text: 'Aún no hay investigaciones.' }
+
+      return { text: v.estado === 'trabajando' ? `Sigo investigando: ${v.pregunta}` : v.estado === 'fallo' ? 'La última investigación falló.' : `# ${v.pregunta}\n\n${v.texto}` }
+    }
 
     if (arg.toLowerCase() === 'guardar') {
       const actual = await read($, investigacion)
@@ -144,12 +147,16 @@ export const register: Register = on => {
       return { text: `Guardada en ${await guardar($, actual)}.` }
     }
 
-    const nueva: Investigacion = { id: String(await $.clock.now()), pregunta: arg, at: await $.clock.now(), estado: 'trabajando', texto: '', archivo: null }
+    const antes = await read($, investigacion)
+    if (antes !== null && antes.estado === 'trabajando') return { text: `Ya estoy investigando: ${antes.pregunta}. Espera a que termine.` }
+    const ahora = await $.clock.now()
+    const nueva: Investigacion = { id: '', pregunta: arg, at: ahora, estado: 'trabajando', texto: '', archivo: null }
     await update($, investigacion, () => nueva)
     try {
       const r = await $.agent.spawn({ prompt: arg, description: `Investigar: ${arg.slice(0, 40)}`, subagentType: 'equipo:investigador' })
       if (r.deny !== undefined) throw new Error(r.deny)
-      investigadorId = r.agentId
+      const agentId = r.agentId ?? ''
+      await update($, investigacion, v => (v === null ? v : { ...v, id: agentId }))
     } catch (error) {
       await update($, investigacion, v => (v === null ? v : { ...v, estado: 'fallo' as const }))
       // Sin agente, Claude lo hace con sus propias herramientas.
@@ -158,6 +165,6 @@ export const register: Register = on => {
       return { text: `No pude lanzar el investigador (${error instanceof Error ? error.message : String(error)}); dejé la pregunta lista para enviar.` }
     }
 
-    return { text: 'Investigando con un agente barato (Haiku). Te aviso cuando termine; el resultado queda en /mods → Web.' }
+    return { text: 'Investigando con un agente barato (Haiku). Te aviso cuando termine; léelo con /investigar ver.' }
   })
 }

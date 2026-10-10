@@ -73,7 +73,7 @@
     {
       "name": "equipo",
       "source": "./mods/equipo",
-      "description": "Equipo de agentes: reparte el trabajo entre Haiku, Sonnet y Opus para gastar menos, y /investigar busca en internet con un agente barato."
+      "description": "Equipo de agentes: reparte el trabajo pesado a Haiku y Sonnet para gastar menos, y /investigar busca en internet con un agente barato."
     }
   ]
 }

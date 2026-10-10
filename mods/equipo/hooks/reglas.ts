@@ -33,9 +33,8 @@ export const MODELO_POR_TIPO: Record<string, 'haiku' | 'sonnet'> = {
   'equipo:investigador': 'haiku',
   'equipo:obrero': 'sonnet',
   'equipo:revisor': 'sonnet',
-  // Los agentes de siempre: sin esto heredan el modelo (y el costo) del director.
+  // Explore de siempre heredaría el costo del director. general-purpose no se toca: lo suele lanzar quien ya decidió que la tarea es difícil.
   Explore: 'haiku',
-  'general-purpose': 'sonnet',
 }
 
 /**
@@ -46,6 +45,8 @@ export const modeloParaAgente = (a: { tipo: string; pedido: string | undefined; 
   if (a.fork || (a.pedido !== undefined && a.pedido !== '')) return undefined
   const objetivo = MODELO_POR_TIPO[a.tipo]
   if (objetivo === undefined) return undefined
+  // Un agente del equipo nunca cuesta más que el director (su modelo fijo es Sonnet).
+  if (a.tipo.startsWith('equipo:') && RANGO[familiaDe(a.padre)] < RANGO[objetivo]) return a.padre
 
   return RANGO[familiaDe(a.padre)] <= RANGO[objetivo] ? undefined : objetivo
 }
@@ -111,16 +112,15 @@ ${FORMATO}`,
 
 /** Cómo debe repartir el trabajo el director (se añade al prompt de sistema). */
 export const GUIA = `# Equipo de trabajo (para gastar poco y hacerlo bien)
-Tú diriges. Para trabajo grande reparte lo pesado entre agentes más baratos; lo pequeño hazlo tú.
-1. Planifica primero con TodoWrite (3 a 7 pasos).
-2. Reparte con la herramienta Agent:
+Tú diriges (si la tarea es grande, planifica antes en pasos cortos). Para trabajo grande reparte lo pesado entre agentes más baratos; lo pequeño hazlo tú.
+1. Reparte con la herramienta Agent:
 - equipo:explorador (Haiku): buscar o leer en muchos archivos. Pídele rutas y líneas, no archivos enteros.
 - equipo:investigador (Haiku): buscar en internet; devuelve resumen con fuentes.
 - equipo:obrero (Sonnet): hacer UN paso claro. Dale una especificación completa y autosuficiente (archivos, qué cambiar, cuándo está listo): no ve esta conversación.
-- equipo:revisor (Sonnet): revisar el trabajo hecho antes de darlo por terminado.
-3. Lanza en paralelo lo independiente (varias llamadas Agent en el mismo mensaje).
-4. Pide respuestas cortas. Integra sus resultados; no repitas su trabajo ni releas lo que ya resumieron.
-5. Como mucho 4 agentes por tarea. Si dudas de que valga la pena delegar, hazlo tú.`
+- equipo:revisor (Sonnet): solo si cambiaste 3 o más archivos de código; en cambios pequeños revisa tú.
+2. Lanza en paralelo lo independiente (varias llamadas Agent en el mismo mensaje).
+3. Pide respuestas cortas. Integra sus resultados; no repitas su trabajo ni releas lo que ya resumieron.
+4. Como mucho 4 agentes por tarea. Si dudas de que valga la pena delegar, hazlo tú.`
 
 export const slug = (texto: string): string =>
   texto
