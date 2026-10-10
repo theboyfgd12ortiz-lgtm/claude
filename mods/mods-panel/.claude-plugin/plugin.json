@@ -12,7 +12,8 @@
     "selector-modelo",
     "presupuesto",
     "traspaso",
-    "mejorar-prompt"
+    "mejorar-prompt",
+    "respaldo"
   ],
   "types": "./types/index.d.ts"
 }

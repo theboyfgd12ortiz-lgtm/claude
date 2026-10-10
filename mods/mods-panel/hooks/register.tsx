@@ -66,6 +66,10 @@ const changes = atom({ plugin: 'mods-panel', key: 'changes' } as const, [])
 const shown = atom({ plugin: 'mods-panel', key: 'shown' } as const, null)
 const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
 const presupuestoAuto = { plugin: 'presupuesto', key: 'isAuto' } as const
+const respaldoPuntos = { plugin: 'respaldo', key: 'puntos' } as const
+const respaldoVista = { plugin: 'respaldo', key: 'vista' } as const
+const respaldoMensaje = { plugin: 'respaldo', key: 'mensaje' } as const
+const respaldoAuto = { plugin: 'respaldo', key: 'isAuto' } as const
 const traspasoNota = { plugin: 'traspaso', key: 'nota' } as const
 const traspasoAuto = { plugin: 'traspaso', key: 'isAuto' } as const
 const mejorarAuto = { plugin: 'mejorar-prompt', key: 'isAuto' } as const
@@ -572,8 +576,44 @@ export const register: Register = on => {
       const open = await read($, shown)
       const files = new Set(list.map(c => c.file)).size
       const recent = list.map((c, i) => ({ c, i })).slice(-10).reverse()
+      const puntosR = (await $.state.get(respaldoPuntos)).value ?? []
+      const vistaR = (await $.state.get(respaldoVista)).value
+      const mensajeR = (await $.state.get(respaldoMensaje)).value
+      const ultimosPuntos = puntosR.slice(-4).reverse()
       body = (
         <Box flexDirection="column">
+          <Section title="↶ DESHACER">
+            {puntosR.length === 0 && (
+              <Text dimColor>
+                Antes de cada pedido guardo un punto de restauración (hace falta un proyecto con git). Aún no hay ninguno.
+              </Text>
+            )}
+            {mensajeR && <Text color="success">{mensajeR}</Text>}
+            {vistaR && (
+              <Box flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1} marginTop={1}>
+                <Text bold>¿Volver atrás?</Text>
+                <Text wrap="wrap">
+                  Restauro {vistaR.modificados.length} archivo{vistaR.modificados.length === 1 ? '' : 's'}
+                  {vistaR.modificados.length > 0 ? ` (${vistaR.modificados.slice(0, 4).join(', ')}${vistaR.modificados.length > 4 ? '…' : ''})` : ''} y quito{' '}
+                  {vistaR.creados.length} nuevo{vistaR.creados.length === 1 ? '' : 's'}
+                  {vistaR.creados.length > 0 ? ` (${vistaR.creados.slice(0, 4).join(', ')}${vistaR.creados.length > 4 ? '…' : ''})` : ''}. Lo que hayas escrito tú antes de ese pedido no se pierde.
+                </Text>
+                <Box flexDirection="row" columnGap={1} marginTop={1}>
+                  <Button key="undo-yes" variant="primary" label="Sí, volver" onPress={() => $.command.run({ command: 'respaldo', args: `aplicar ${vistaR.id}` })} />
+                  <Button key="undo-no" label="Cancelar" onPress={() => $.command.run({ command: 'respaldo', args: 'cancelar' })} />
+                </Box>
+              </Box>
+            )}
+            {!vistaR &&
+              ultimosPuntos.map((p, i) => (
+                <Box key={`pt-${p.id}`} flexDirection="row" justifyContent="space-between" columnGap={1} marginTop={1}>
+                  <Text wrap="truncate-end">
+                    <Text dimColor>{clock(p.at)}</Text> {i === 0 ? 'Antes de' : 'Antes de'} <Text bold>{p.pedido || '(un pedido)'}</Text>
+                  </Text>
+                  <Button key={`undo-${p.id}`} label="Volver aquí" onPress={() => $.command.run({ command: 'respaldo', args: `preparar ${p.id}` })} />
+                </Box>
+              ))}
+          </Section>
           <Section title={`CAMBIOS  ${list.length} ediciones · ${files} archivos`}>
             {list.length === 0 && <Text dimColor>Cuando edite o cree archivos, aquí verás cada cambio con el antes (−) y el después (+).</Text>}
             {recent.map(({ c, i }) => (
@@ -788,6 +828,14 @@ export const register: Register = on => {
           action: { label: 'Reiniciar', press: () => $.command.run({ command: 'tokens', args: 'reset' }) },
         },
         {
+          key: 'respaldo',
+          on: x.plugins.includes('respaldo') && ((await $.state.get(respaldoAuto)).value ?? true),
+          name: 'Respaldo',
+          what: 'Antes de cada pedido guardo un punto de restauración, para poder deshacer sin miedo.',
+          stat: !x.plugins.includes('respaldo') ? 'no instalado' : `${((await $.state.get(respaldoPuntos)).value ?? []).length} puntos guardados`,
+          action: x.plugins.includes('respaldo') ? { label: 'Ver y deshacer', press: () => update($, tab, () => 'cambios' as const) } : undefined,
+        },
+        {
           key: 'presupuesto',
           on: x.plugins.includes('presupuesto') && ((await $.state.get(presupuestoAuto)).value ?? true),
           name: 'Presupuesto',
@@ -874,6 +922,7 @@ export const register: Register = on => {
             <Text>/presupuesto · on · off · cuidar el límite</Text>
             <Text>/guardar · /retomar · seguir en una charla limpia</Text>
             <Text>/mejorar &lt;pedido&gt; · pedidos claros</Text>
+            <Text>/respaldo · puntos de restauración (el botón Deshacer está en Cambios)</Text>
             <Text>/tokens · gasto de la sesión</Text>
             <Text>/caveman · stop caveman · respuestas cortas</Text>
             <Text>/ponytail off · soluciones mínimas</Text>

@@ -154,3 +154,29 @@ export const discardsWork = (command: string): boolean =>
       /^git\s+(reset\s+.*--hard|checkout\s+(--\s+)?\.(\s|$)|restore\s+(--\S+\s+)*\.(\s|$)|clean\s+-[a-zA-Z]*f|stash\s+(drop|clear))/.test(c.join(' '))
     )
   })
+
+/**
+ * Claves que nunca deben escribirse en un archivo del proyecto. Solo formas inconfundibles:
+ * una clave pública de un sitio (por ejemplo la "anon" de Supabase) no entra aquí.
+ */
+const SECRETOS: readonly { nombre: string; patron: RegExp }[] = [
+  { nombre: 'una llave privada', patron: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY(?: BLOCK)?-----/ },
+  { nombre: 'una clave de Anthropic', patron: /\bsk-ant-[A-Za-z0-9_-]{20,}/ },
+  { nombre: 'una clave de OpenAI', patron: /\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}/ },
+  { nombre: 'un token de GitHub', patron: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}|\bgithub_pat_[A-Za-z0-9_]{40,}/ },
+  { nombre: 'una clave de AWS', patron: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/ },
+  { nombre: 'un token de Slack', patron: /\bxox[abprs]-[A-Za-z0-9-]{20,}/ },
+  { nombre: 'una clave secreta de Stripe', patron: /\b[sr]k_live_[A-Za-z0-9]{20,}/ },
+  { nombre: 'una clave "service_role" de Supabase', patron: /service_role['"]?\s*[:=]\s*['"]eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{30,}\./ },
+]
+
+/** Archivos donde sí es normal tener secretos (o ejemplos): no se revisan. */
+const SIN_REVISAR = /(^|[\/\\])(\.env(\.[\w.-]+)?|[\w.-]+\.(?:example|sample|template)|[\w.-]*test[\w.-]*|[\w.-]*\.md)$/i
+
+/** Qué secreto hay en el texto que se va a escribir en `ruta`, o undefined si no hay. */
+export const secretoEn = (ruta: string, texto: string): string | undefined => {
+  if (SIN_REVISAR.test(ruta) && !/\.md$/i.test(ruta)) return undefined
+  if (/\.md$/i.test(ruta) && !/PRIVATE KEY/.test(texto)) return undefined
+
+  return SECRETOS.find(s => s.patron.test(texto))?.nombre
+}

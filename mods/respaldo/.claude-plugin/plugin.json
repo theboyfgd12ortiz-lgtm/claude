@@ -1,0 +1,6 @@
+{
+  "name": "respaldo",
+  "description": "Antes de cada pedido guarda un punto de restauración (con git, sin tocar tus ramas ni commits). Si algo sale mal, un botón del panel vuelve atrás.",
+  "author": { "name": "theboyfgd12ortiz-lgtm" },
+  "types": "./types/index.d.ts"
+}

@@ -51,6 +51,11 @@
       "description": "/mejorar convierte un pedido vago en uno claro antes de enviarlo."
     },
     {
+      "name": "respaldo",
+      "source": "./mods/respaldo",
+      "description": "Un punto de restauración antes de cada pedido, con botón Deshacer (usa git sin tocar tus ramas)."
+    },
+    {
       "name": "mods-panel",
       "source": "./mods/mods-panel",
       "description": "Panel /mods: explica cada mod en español y muestra su estado en vivo."

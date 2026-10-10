@@ -100,6 +100,14 @@ async function techoAhora($: EngineInterface): Promise<number> {
   return techoEfectivo(await read($, tope), presupuesto?.value?.topeMax)
 }
 
+/** Lo que Claude lee junto a una tarea grande: empezar con un plan visible, no con el código. */
+export const AVISO_PLAN = `Esta es una tarea grande. Empieza con un plan corto de 3 a 7 pasos usando la herramienta de lista de tareas (TodoWrite), con el paso actual marcado en curso, y ve marcándolos como hechos al terminarlos. Así el usuario ve el avance. No escribas el plan como texto aparte. Si algo del pedido es ambiguo y cambia mucho el resultado, pregunta antes de empezar.`
+
+/** ¿Merece la pena un plan visible? Tareas de varias partes, o con riesgo, no los pedidos pequeños. */
+export function pideUnPlan(p: Puntos | null): boolean {
+  return p !== null && (p.alcance >= 2 || (p.alcance >= 1 && p.riesgo >= 2))
+}
+
 export function limitar(n: number, minimo: number, maximo: number): number {
   return Math.min(maximo, Math.max(minimo, Math.round(n)))
 }
@@ -424,7 +432,8 @@ export const register: Register = on => {
     await update($, nivel, () => elegido)
     await mostrar($)
 
-    return next(e)
+    // Tarea grande: Claude empieza con un plan visible en el Centro de control (la persona no lo pide).
+    return pideUnPlan(puntos) ? next({ ...e, context: [...(e.context ?? []), AVISO_PLAN] }) : next(e)
   }).catch(($, e, next) => next(e))
 
   on('tool.call', async ($, e, next) => {

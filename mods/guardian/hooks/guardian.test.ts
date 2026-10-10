@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { discardsWork, judgeCommand, judgeSecretPath } from './rules'
+import { discardsWork, judgeCommand, judgeSecretPath, secretoEn } from './rules'
 
 describe('rules', () => {
   test('blocks catastrophic commands', () => {
@@ -83,4 +83,33 @@ test('denies reading a .env file even without a clock', async ($, on) => {
   on('tool.call', { tool: 'Read' }, () => ({ result: 'unused' as never }))
   const res = await $.tool.call({ tool: 'Read', file_path: '/repo/.env' })
   expect(res.deny).toMatch(/secretos/)
+})
+
+describe('claves en archivos', () => {
+  test('detecta claves inconfundibles', () => {
+    const f = (a: string, b: string) => a + b
+    expect(secretoEn('app.js', `const k = "${f('sk-ant-', 'api03-abcdefghijklmnopqrstuvwxyz0123')}"`)).toBe('una clave de Anthropic')
+    expect(secretoEn('app.js', `token: "${f('ghp_', 'abcdefghijklmnopqrstuvwxyz0123456789')}"`)).toBe('un token de GitHub')
+    expect(secretoEn('k.js', `${f('AKIA', 'ABCDEFGHIJKLMNOP')}`)).toBe('una clave de AWS')
+    expect(secretoEn('deploy.sh', '-----BEGIN ' + 'PRIVATE KEY-----\nabc')).toBe('una llave privada')
+    expect(secretoEn('x.js', `${f('sk_live_', 'abcdefghijklmnopqrstuvwx')}`)).toBe('una clave secreta de Stripe')
+  })
+
+  test('deja pasar lo normal', () => {
+    expect(secretoEn('app.js', 'const url = "https://x.supabase.co"; const anon = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.firma"')).toBeUndefined()
+    expect(secretoEn('.env', 'KEY=' + 'sk-ant-' + 'api03-abcdefghijklmnopqrstuvwxyz0123')).toBeUndefined()
+    expect(secretoEn('.env.example', 'KEY=' + 'AKIA' + 'ABCDEFGHIJKLMNOP')).toBeUndefined()
+    expect(secretoEn('notas.md', 'usa una clave que empiece con sk-ant-')).toBeUndefined()
+    expect(secretoEn('app.js', 'const sk = 1; // sk-')).toBeUndefined()
+  })
+})
+
+test('rechaza escribir una clave en un archivo', async ($, on) => {
+  mock.clock(on)
+  on('tool.call', { tool: 'Write' }, () => ({ result: { type: 'create', filePath: 'x' } }) as never)
+  const clave = 'ghp_' + 'abcdefghijklmnopqrstuvwxyz0123456789'
+  const mala = await $.tool.call({ tool: 'Write', file_path: '/r/app.js', content: `const t = "${clave}"` } as never)
+  expect(mala.deny).toMatch(/no escribo un token de GitHub/)
+  const buena = await $.tool.call({ tool: 'Write', file_path: '/r/app.js', content: 'const t = process.env.TOKEN' } as never)
+  expect(buena.deny).toBeUndefined()
 })

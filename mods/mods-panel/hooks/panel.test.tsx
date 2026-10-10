@@ -204,3 +204,33 @@ test('offers to resume a saved note in a fresh chat', { plugins: [traspasoSimula
   expect(await ui.find({ key: 'note-resume' })).toBeDefined()
   await ui.unmount()
 })
+
+/** A stand-in for respaldo: it publishes a restore point and, on the second start, a pending preview. */
+const respaldoSimulado = {
+  name: 'respaldo',
+  register: (on: On) => {
+    on('session.start', async ($, e, next) => {
+      await $.state.set({ plugin: 'respaldo', key: 'puntos' } as const, [{ id: 'p1', sha: 'abc', at: 1, pedido: 'haz la página', existentes: [] }])
+      await $.state.set({ plugin: 'respaldo', key: 'vista' } as const, { id: 'p1', modificados: ['index.html'], creados: ['nuevo.css'] })
+
+      return next(e)
+    })
+  },
+}
+
+test('Deshacer shows the preview and asks before touching files', { plugins: [respaldoSimulado] }, async ($, on) => {
+  mock.clock(on)
+  on('command.register', () => ({ value: { command: 'x' } }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('command.list', () => ({ value: [] }) as never)
+  on('session.start', () => ({ cwd: '/r' }) as never)
+  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'tab-cambios' })
+  expect(await ui.find({ type: 'Text', text: /¿Volver atrás\?/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Restauro 1 archivo \(index\.html\) y quito 1 nuevo \(nuevo\.css\)/ })).toBeDefined()
+  expect(await ui.find({ key: 'undo-yes' })).toBeDefined()
+  expect(await ui.find({ key: 'undo-no' })).toBeDefined()
+  await ui.unmount()
+})

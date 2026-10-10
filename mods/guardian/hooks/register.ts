@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { GuardianBlock } from '../types'
-import { discardsWork, judgeCommand, judgeSecretPath } from './rules'
+import { discardsWork, judgeCommand, judgeSecretPath, secretoEn } from './rules'
 
 const ASK = 'If the user explicitly wants this, ask them to run it themselves or to type /guardian off.'
 
@@ -93,5 +93,23 @@ export const register: Register = on => {
           why,
           `${$.plugin.name}: not reading ${e.file_path}: ${why}. Refer to variable names, or use the .example file. ${ASK}`,
         )
+  }).catch(($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }))
+
+  // Claves que se escribirían en un archivo del proyecto (subirlas a GitHub o a un sitio publicado las expone).
+  const AVISO_SECRETO = (donde: string, que: string) =>
+    `guardian: no escribo ${que} en ${donde}: las claves no van dentro del código. Guárdala en un archivo .env (que no se sube) y léela desde ahí con una variable de entorno. Si de verdad es una clave pública, avisa al usuario.`
+
+  on('tool.call', { tool: 'Write' }, async ($, e, next) => {
+    if (await read($, isPaused)) return next(e)
+    const que = secretoEn(e.file_path, e.content)
+
+    return que === undefined ? next(e) : refuse($, `Write ${e.file_path}`, `iba a escribir ${que}`, AVISO_SECRETO(e.file_path, que))
+  }).catch(($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }))
+
+  on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
+    if (await read($, isPaused)) return next(e)
+    const que = secretoEn(e.file_path, e.new_string)
+
+    return que === undefined ? next(e) : refuse($, `Edit ${e.file_path}`, `iba a escribir ${que}`, AVISO_SECRETO(e.file_path, que))
   }).catch(($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }))
 }

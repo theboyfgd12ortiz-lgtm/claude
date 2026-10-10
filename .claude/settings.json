@@ -45,7 +45,8 @@
     "token-optimizer@alexgreensh-token-optimizer": true,
     "presupuesto@claude-mods": true,
     "traspaso@claude-mods": true,
-    "mejorar-prompt@claude-mods": true
+    "mejorar-prompt@claude-mods": true,
+    "respaldo@claude-mods": true
   },
   "env": {
     "TOKEN_OPTIMIZER_BASH_COMPRESS": "0",

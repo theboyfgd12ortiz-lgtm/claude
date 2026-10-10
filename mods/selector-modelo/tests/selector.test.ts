@@ -9,6 +9,7 @@ import {
   leerPuntos,
   peldano,
   puntosANivel,
+  pideUnPlan,
   techoEfectivo,
 } from '../hooks/register'
 
@@ -181,4 +182,12 @@ test('el presupuesto puede bajar el tope, nunca subirlo', async () => {
   expect(techoEfectivo(9, 4)).toBe(4)
   expect(techoEfectivo(3, 5)).toBe(3)
   expect(techoEfectivo(9, undefined)).toBe(9)
+})
+
+test('las tareas grandes piden un plan visible, las pequeñas no', async () => {
+  expect(pideUnPlan(null)).toBe(false)
+  expect(pideUnPlan(CERO)).toBe(false)
+  expect(pideUnPlan(PAGINA)).toBe(true)
+  expect(pideUnPlan({ ...CERO, alcance: 1, razonamiento: 1 })).toBe(false)
+  expect(pideUnPlan({ ...CERO, alcance: 1, riesgo: 3 })).toBe(true)
 })
