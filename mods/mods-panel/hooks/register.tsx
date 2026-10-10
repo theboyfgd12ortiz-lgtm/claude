@@ -157,6 +157,39 @@ const offer = async ($: EngineInterface, text: string) => {
   $.ui.toast('Listo en el cuadro de mensaje: pulsa Enter para enviarlo.')
 }
 
+/** The panel's main facts as text, for surfaces that draw no pane. */
+const summary = async ($: EngineInterface): Promise<string> => {
+  const n = (await $.state.get(selNivel)).value
+  const modo = (await $.state.get(selModo)).value ?? 'auto'
+  const x = await read($, extras)
+  const trim = (await $.state.get(trimStats)).value ?? { trims: 0, savedChars: 0 }
+  const rtkSession = x.rtk !== null && x.rtkAtStart !== null ? Math.max(0, x.rtk.saved - x.rtkAtStart) : 0
+  const paused = (await $.state.get(guardianPaused)).value ?? false
+  const blocks = (await $.state.get(guardianBlocks)).value ?? []
+  const steps = await read($, plan)
+  const items = (await read($, feed)).slice(-8)
+  const plugins = x.plugins.length > 0 ? x.plugins : await listPlugins($)
+  const lines = [
+    '**Centro de control** (aquí no se puede dibujar el panel; este es el resumen)',
+    '',
+    n === undefined ? '- Modelo: el selector elige al enviar tu primer mensaje' : `- Modelo: ${step(n).model}, nivel ${n} de 9 (${modo === 'auto' ? 'automático' : 'fijo'})`,
+    `- Ahorro en esta sesión: ~${short(rtkSession + Math.round(trim.savedChars / 4))} tokens (rtk ${short(rtkSession)}, recortes ${trim.trims})`,
+    `- Guardián: ${paused ? 'en pausa' : 'protegiendo'} · ${blocks.length} bloqueos`,
+    `- rtk: ${x.rtk === null ? 'no instalado' : `versión ${x.rtk.version}`}`,
+    `- Plugins activos: ${plugins.filter(p => !p.includes(' ')).join(', ') || 'ninguno detectado'}`,
+  ]
+  if (steps.length > 0) {
+    lines.push('', `**Plan** ${steps.filter(p => p.status === 'completed').length}/${steps.length}`)
+    for (const p of steps.slice(0, 10)) lines.push(`- ${p.status === 'completed' ? '✓' : p.status === 'in_progress' ? '▶' : '○'} ${p.text}`)
+  }
+  if (items.length > 0) {
+    lines.push('', '**Actividad reciente**')
+    for (const i of items) lines.push(`- ${clock(i.at)} ${i.icon} ${i.text}`)
+  }
+
+  return lines.join('\n')
+}
+
 export const register: Register = on => {
   // ── Session ──
   on('session.start', async ($, e, next) => {
@@ -176,7 +209,8 @@ export const register: Register = on => {
     const which = TABS.find(t => t.id === arg)?.id
     const opened = await openOn($, which)
 
-    return { text: opened.isPlaced ? 'Centro de control abierto.' : 'El panel está listo; agranda la ventana para verlo.' }
+    // Where nothing draws a pane (a cloud session, the VS Code chat), answer with the same facts as text.
+    return { text: opened.isPlaced ? 'Centro de control abierto.' : await summary($) }
   })
 
   // ── A turn begins: what was asked and which model the selector chose ──

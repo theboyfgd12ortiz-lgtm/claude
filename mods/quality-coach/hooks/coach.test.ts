@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { isCodeFile, isVerification } from './rules'
+import { isCodeFile, isVerification, runsEdited } from './rules'
 
 test('tells code from docs', () => {
   expect(isCodeFile('/r/src/app.ts')).toBe(true)
@@ -23,4 +23,12 @@ test('adds its rules to the system prompt', async ($, on) => {
   const composed = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] })
   const ids = composed.sections.map(s => s.id)
   expect(ids).toContain('quality-coach:rules')
+})
+
+test('running the edited file counts as checking it', () => {
+  const edited = new Set(['/repo/scripts/cloud-setup.sh'])
+  expect(runsEdited('bash -n scripts/cloud-setup.sh', edited)).toBe(true)
+  expect(runsEdited('HOME=/x bash /repo/scripts/cloud-setup.sh | tail', edited)).toBe(true)
+  expect(runsEdited('cat scripts/cloud-setup.sh', edited)).toBe(false)
+  expect(runsEdited('bash other.sh', edited)).toBe(false)
 })

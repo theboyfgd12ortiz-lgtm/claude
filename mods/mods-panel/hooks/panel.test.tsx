@@ -114,3 +114,13 @@ test('a turn shows up as activity, plan and cost', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /Respuesta lista .* 1.0k leídos \(80% caché\)/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('/mods answers with a text summary where no pane can be drawn', async ($, on) => {
+  mock.clock(on)
+  on('ui.open', () => ({ value: { isPlaced: false, reason: 'no surface' } }) as never)
+  on('command.list', () => ({ value: [{ name: 'guardian', description: '', source: 'plugin', plugin: 'guardian' }] }) as never)
+  const out = await $.command.run({ command: 'mods', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as never)
+  expect(out.text).toMatch(/Centro de control/)
+  expect(out.text).toMatch(/Guardián: protegiendo/)
+  expect(out.text).toMatch(/Plugins activos: guardian/)
+})

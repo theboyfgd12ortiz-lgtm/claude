@@ -1,7 +1,7 @@
 import { atom, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import { COMPACT_HINT, isCodeFile, isVerification, RULES } from './rules'
+import { COMPACT_HINT, isCodeFile, isVerification, RULES, runsEdited } from './rules'
 
 const isActive = atom({ plugin: 'quality-coach', key: 'isActive' } as const, false)
 const stats = atom({ plugin: 'quality-coach', key: 'stats' } as const, { codeTurns: 0, verifiedTurns: 0, lastWarning: null })
@@ -40,7 +40,7 @@ export const register: Register = on => {
       if (isCodeFile(e.file_path)) edited.add(e.file_path)
     } else if (e.tool === 'NotebookEdit') {
       edited.add(e.notebook_path)
-    } else if (e.tool === 'Bash' && isVerification(e.command)) {
+    } else if (e.tool === 'Bash' && (isVerification(e.command) || runsEdited(e.command, edited))) {
       verifications += 1
     }
 
