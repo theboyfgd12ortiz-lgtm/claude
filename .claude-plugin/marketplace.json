@@ -1,0 +1,29 @@
+{
+  "name": "claude-mods",
+  "description": "Mods para Claude Code: seguridad, ahorro de tokens y mejores resultados.",
+  "owner": {
+    "name": "theboyfgd12ortiz-lgtm"
+  },
+  "plugins": [
+    {
+      "name": "guardian",
+      "source": "./mods/guardian",
+      "description": "Bloquea comandos destructivos y lecturas de secretos antes de que se ejecuten."
+    },
+    {
+      "name": "output-trim",
+      "source": "./mods/output-trim",
+      "description": "Ahorra tokens recortando salidas enormes de Bash a inicio + final."
+    },
+    {
+      "name": "quality-coach",
+      "source": "./mods/quality-coach",
+      "description": "Reglas de trabajo, aviso de código sin verificar y mejores resúmenes al compactar."
+    },
+    {
+      "name": "token-meter",
+      "source": "./mods/token-meter",
+      "description": "Muestra tokens, caché, tiempo y herramientas de cada turno; /tokens para el total."
+    }
+  ]
+}

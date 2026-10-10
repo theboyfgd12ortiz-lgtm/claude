@@ -1,0 +1,8 @@
+{
+  "name": "guardian",
+  "version": "0.1.0",
+  "description": "Blocks destructive shell commands and secret-file reads before they run; /guardian off to pause it.",
+  "author": {
+    "name": "theboyfgd12ortiz-lgtm"
+  }
+}
