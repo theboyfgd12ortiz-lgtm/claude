@@ -69,6 +69,11 @@
       "name": "mods-panel",
       "source": "./mods/mods-panel",
       "description": "Panel /mods: explica cada mod en español y muestra su estado en vivo."
+    },
+    {
+      "name": "equipo",
+      "source": "./mods/equipo",
+      "description": "Equipo de agentes: reparte el trabajo entre Haiku, Sonnet y Opus para gastar menos, y /investigar busca en internet con un agente barato."
     }
   ]
 }

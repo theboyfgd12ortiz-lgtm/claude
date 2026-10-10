@@ -1,0 +1,6 @@
+{
+  "name": "equipo",
+  "description": "Un director y su equipo: Claude planifica y reparte el trabajo pesado (leer, buscar, investigar, revisar) a modelos más baratos, cada uno con su especialidad, y el panel muestra quién hizo qué y cuánto se ahorra.",
+  "author": { "name": "theboyfgd12ortiz-lgtm" },
+  "types": "./types/index.d.ts"
+}
