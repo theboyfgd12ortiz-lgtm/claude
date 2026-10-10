@@ -1,41 +1,42 @@
-<!-- traspaso 2026-10-10T16:16:51.632Z auto -->
+<!-- traspaso 2026-10-10T16:50:44.592Z auto -->
 
 ## Objetivo
-El usuario quiere una colección de mods para Claude Code que mejoren el trabajo, ahorren tokens y funcionen solos, sin tener que recordar comandos `/`. Todo debe verse en un panel único, el Centro de control (`/mods`), y funcionar en su PC Windows y en la nube con actualización automática. Ahora pide dos cosas: un orquestador que reparta el trabajo entre Haiku, Sonnet y Opus, y que `web` también sirva para investigar y buscar imágenes y datos.
+El usuario, no técnico, usa Windows con PowerShell y la app de escritorio. Quiere "mods" de Claude Code que bajen el costo por tarea, den resultados excelentes y funcionen solos, sin recordar comandos. Todo debe verse en un panel, el Centro de control (`/mods`), funcionar en local y en la nube, y actualizarse solo. Repo `theboyfgd12ortiz-lgtm/claude`, rama `claude/adoring-ride-khnvyf`.
 
 ## Hecho
-- Repo `theboyfgd12ortiz-lgtm/claude`, con todo subido en la rama `claude/adoring-ride-khnvyf` (commit 27ee29e).
-- Mods en `mods/`: `selector-modelo`, `rtk-hook`, `guardian`, `output-trim`, `quality-coach`, `token-meter`, `presupuesto`, `traspaso`, `mejorar-prompt`, `respaldo`, `web`, `memoria` y `mods-panel`.
-- Nuevo `mods/equipo/`:
-  - `hooks/reglas.ts`: agentes explorador, investigador, obrero y revisor, modelo por tipo, `modeloParaAgente`, costo y ahorro estimados, `GUIA` y `slug`.
-  - `hooks/register.ts`: hook `agent.spawn`, registro del gasto en `turn.complete`, guía en `prompt.compose`, y los comandos `/equipo on|off` y `/investigar <pregunta>|guardar`.
-  - `types/index.d.ts` y `hooks/equipo.test.ts` (6 pruebas, todas pasan).
-- `equipo` está registrado en `.claude-plugin/marketplace.json` y `.claude/settings.json`.
-- Instaladores: `scripts/install-mods.sh`, `scripts/install-mods.ps1` y `scripts/cloud-setup.sh`.
+- 14 mods en `mods/`:
+  - selector-modelo, guardian, output-trim, quality-coach, token-meter, presupuesto, traspaso
+  - mejorar-prompt, respaldo, web, memoria, rtk-hook, mods-panel
+  - **equipo**, el nuevo
+- `mods/equipo/hooks/`:
+  - `reglas.ts`: los 4 agentes (explorador, investigador, obrero, revisor), el modelo de cada tipo, el ahorro neto y la GUIA.
+  - `aprende.ts`: aprendizaje por tipo, contrato de respuesta y lecciones.
+  - `contexto.ts`: pizarra, detección de tarea grande, pistas y aviso al compactar.
+  - `register.ts`: hooks y comandos `/equipo` (on, off, olvidar, probar) y `/investigar` (ver, guardar).
+- `mods/mods-panel/hooks/register.tsx` y `model.ts`: pestaña **Equipo** con ahorro neto, agentes, lo aprendido, investigación y botón "Probar que funciona".
+- Se quitó la sección "reparto" de `selector-modelo`, que ahora depende de equipo.
+- Equipo está registrado en `.claude-plugin/marketplace.json`, `.claude/settings.json` y `README.md`.
+- Todo subido. Pasan las pruebas de los 13 mods con pruebas, `tsc` y la validación.
 
 ## Decisiones
-- Solo se baja el modelo cuando el agente no trae uno, no es una bifurcación (fork) y el director es más caro. Así se respeta lo que se pidió a propósito.
-- El ahorro se muestra como estimación en "unidades Haiku" con proporciones de precio 1/3/5, porque no hay factura real.
-- La Batch API queda descartada: tarda hasta 24 h y no encaja con trabajo interactivo. La caché de prompts ya la usa Claude Code.
-- Workflows quedan descartados: solo se usan si el usuario lo pide de forma explícita.
-- Las bandas bajo el prompt quedan apagadas para que toda la información viva en el panel.
+- No se añadió búsqueda de imágenes ni datos a `web`: el usuario lo descartó.
+- Las pistas viajan con el mensaje (`prompt.submit`), no en el prompt de sistema, para no romper la caché.
+- Un tipo sube Haiku → Sonnet → Opus tras 2 fallos en sus últimos 4 trabajos. Baja un escalón tras 8 aciertos seguidos.
+- `general-purpose` no se abarata, porque suele lanzarse para tareas difíciles.
+- Con el presupuesto apretado no se pone la GUIA ni las pistas.
+- Si el clasificador del modo automático rechaza un agente lanzado por un comando, se reintenta una vez. Si vuelve a fallar, la petición queda escrita en el cuadro.
+- No usar la herramienta Workflow sin que el usuario lo pida.
 
 ## Pendiente
-1. Quitar la sección `selector-modelo:reparto` del selector y añadir `equipo` a sus dependencias.
-2. En `web`, añadir `/imagenes` con Openverse (licencia y crédito) y `/dato` con Wikipedia (atender el error 429), con parsers puros y pruebas.
-3. En el panel:
-   - Pestaña Equipo: agentes, modelos, tokens, ahorro y un campo para pedir un plan.
-   - Sección Buscar en Web: investigar, imágenes y datos.
-   - Una fila para `equipo` en Mods, actualizar Ayuda y añadir `equipo` a las dependencias.
-4. Actualizar el README, pasar tsc, validate y test a todos los mods, hacer commit y push.
-5. Explicarle al usuario qué falta probar en real: `$.agent.spawn` y los permisos de WebSearch.
+1. El usuario debe reinstalar y correr `/equipo probar` en local y en la nube.
+2. Verificar en sesión real que se aplica el modelo barato, el porcentaje de contexto y si `WebSearch` pide permiso en segundo plano.
+3. Detectar retrabajo del director: hoy solo se mide el formato de la respuesta y el veredicto del revisor.
+4. Opcional: añadir la pizarra y el plan a la pestaña Equipo.
 
 ## Datos clave
-- Probar un mod: `claude plugin test mods/<nombre>`.
-- Validar: `claude plugin validate .`.
+- Pruebas: `claude plugin test mods/<nombre>` y `claude plugin validate .`.
 - Tipos: `npx -p typescript tsc -p <scratchpad>/tsconfig.all.json`.
-- Script de entorno en la nube: `git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/cm && bash /tmp/cm/scripts/cloud-setup.sh`.
-- En las pruebas hay que simular `clock.now` y `turn.complete`; este último debe devolver `{ text }`.
-- `$.prompt.fill` recibe `{ text }`.
-- Openverse funciona sin clave. DuckDuckGo está bloqueado.
-- El usuario habla español, usa Windows con PowerShell y la app de escritorio, y se le olvidan los comandos `/`.
+- Script de la nube: `git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/cm && bash /tmp/cm/scripts/cloud-setup.sh`.
+- Instaladores: `scripts/install-mods.ps1` (Windows) y `scripts/install-mods.sh`.
+- Archivos que se generan en el proyecto: `.claude/equipo/pizarra.md`, `.claude/equipo/plan.md` y `.claude/investigaciones/<slug>.md`.
+- Los commits terminan con `Co-Authored-By` y `Claude-Session`.
