@@ -13,16 +13,25 @@ export const familiaDe = (modelo: string): Familia => {
   return 'otro'
 }
 
-/** Qué tan caro es cada modelo respecto a Haiku (proporciones de los precios publicados; no es una factura). */
-export const PRECIO: Record<Familia, number> = { haiku: 1, sonnet: 3, opus: 5, otro: 3 }
+/**
+ * Precio de entrada relativo a Haiku (precios publicados por millón de tokens: Haiku 5.5 $0.10, Sonnet 5.5 $2, Opus 5.5 $4... la proporción
+ * que usa el equipo es 1 : 20 : 40; la salida cuesta 5 veces la entrada en los tres). Es una estimación, no una factura.
+ */
+export const PRECIO: Record<Familia, number> = { haiku: 1, sonnet: 20, opus: 40, otro: 20 }
+/** Lo que cuesta leer de la caché, como fracción de la entrada normal (Sonnet y Opus: $0.20 por millón). */
+export const CACHE: Record<Familia, number> = { haiku: 0.1, sonnet: 0.1, opus: 0.05, otro: 0.1 }
 const RANGO: Record<Familia, number> = { haiku: 1, sonnet: 2, opus: 3, otro: 2 }
+export const rango = (f: Familia): number => RANGO[f]
+
+/** La familia del escalón del selector (1-2 Haiku, 3-5 Sonnet, 6-9 Opus): el modelo con el que de verdad trabaja el director. */
+export const familiaDeNivel = (n: number): Familia => (n <= 2 ? 'haiku' : n <= 5 ? 'sonnet' : 'opus')
 
 /**
  * Costo relativo de un trabajo, en "unidades Haiku": lo escrito pesa 5 veces lo leído nuevo,
  * y lo que sale de la caché cuesta una décima parte.
  */
 export const costo = (r: Pick<Registro, 'nuevo' | 'cache' | 'escrito'>, familia: Familia): number =>
-  (r.nuevo + r.cache * 0.1 + r.escrito * 5) * PRECIO[familia]
+  (r.nuevo + r.cache * CACHE[familia] + r.escrito * 5) * PRECIO[familia]
 
 const delDirector = (r: Pick<Registro, 'padre'>): Familia => (r.padre === 'otro' ? 'opus' : r.padre)
 

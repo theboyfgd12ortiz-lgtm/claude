@@ -5,6 +5,8 @@ import { isCodeFile, isVerification, runsEdited } from './rules'
 test('tells code from docs', () => {
   expect(isCodeFile('/r/src/app.ts')).toBe(true)
   expect(isCodeFile('/r/main.py')).toBe(true)
+  expect(isCodeFile('/r/index.html')).toBe(false)
+  expect(isCodeFile('/r/estilos.css')).toBe(false)
   expect(isCodeFile('/r/README.md')).toBe(false)
   expect(isCodeFile('/r/docs/notes.txt')).toBe(false)
 })

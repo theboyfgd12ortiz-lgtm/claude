@@ -219,6 +219,12 @@ export function ajustes(texto: string, adjuntos: number): { delta: number; minim
   return { delta, minimo, notas }
 }
 
+/** Dos niveles que corren con el mismo modelo y el mismo esfuerzo no cambian nada. */
+const mismoAjuste = (a: number, b: number): boolean => peldano(a).model === peldano(b).model && peldano(a).effort === peldano(b).effort
+
+/** Minutos que dura la caché de mensajes tras el último uso. */
+const CACHE_MS = 5 * 60 * 1000
+
 /**
  * Entre el nivel que se venía usando y el que pide la tarea, cuál se usa de verdad.
  * Subir de modelo siempre se permite. Bajar de modelo tira la caché de la conversación:
@@ -230,7 +236,13 @@ export function decidir(a: {
   mensajes: number
   contexto: number
   alcance: number
+  /** false si el último turno fue hace menos de 5 minutos: la caché está caliente y cambiar de modelo o de esfuerzo la tira. */
+  fria?: boolean
 }): { nivel: number; nota: string } {
+  // Con la caché caliente solo se cambia para subir 2 escalones o más: leerla cuesta ~1/20 de reescribirla.
+  if (a.fria === false && a.pedido !== a.actual && a.pedido - a.actual < 2 && !mismoAjuste(a.actual, a.pedido)) {
+    return { nivel: a.actual, nota: 'caché caliente: mismo modelo y esfuerzo' }
+  }
   if (peldano(a.actual).familia === peldano(a.pedido).familia || a.pedido > a.actual) {
     return { nivel: a.pedido, nota: '' }
   }
@@ -405,7 +417,9 @@ export const register: Register = on => {
       const extra = ajustes(texto, adjuntos)
       const techo = await techoAhora($)
       const pedido = limitar(Math.max(puntosANivel(puntos) + extra.delta, extra.minimo), 1, techo)
-      const decision = decidir({ actual, pedido, mensajes, contexto, alcance: puntos.alcance })
+      const ultimo = (await read($, historial)).at(-1)?.hora
+      const fria = ultimo === undefined || (await $.clock.now()) - ultimo > CACHE_MS
+      const decision = decidir({ actual, pedido, mensajes, contexto, alcance: puntos.alcance, fria })
       elegido = decision.nivel
       if (leido?.temaNuevo && contexto > CONTEXTO_CLEAR) {
         $.ui.toast('Tema nuevo con mucha conversación encima: escribe /clear antes para gastar menos tokens')

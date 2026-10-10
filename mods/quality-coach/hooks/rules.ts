@@ -9,7 +9,7 @@ export const RULES = `# Working rules (quality-coach)
 
 export const COMPACT_HINT = `Keep in the summary: the user's goal, constraints and stated preferences; every file created or modified (path) and why; decisions taken and approaches rejected, with the reason; the commands that verify the work and their latest results; errors still open; the remaining steps. Leave out raw file contents and long tool outputs already acted on.`
 
-const NOT_CODE = /\.(md|mdx|txt|rst|adoc|csv|log|lock|svg|png|jpe?g|gif|ico|pdf)$|(^|\/)(LICENSE|CHANGELOG|README)[^/]*$/i
+const NOT_CODE = /\.(md|mdx|txt|rst|adoc|csv|log|lock|svg|html?|css|scss|png|jpe?g|gif|ico|pdf)$|(^|\/)(LICENSE|CHANGELOG|README)[^/]*$/i
 
 /** Whether a file is source the project would test or build (docs and assets are not). */
 export const isCodeFile = (path: string): boolean => !NOT_CODE.test(path)

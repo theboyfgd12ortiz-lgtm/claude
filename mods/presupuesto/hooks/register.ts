@@ -4,6 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Estado } from '../types'
 import { ETIQUETA, INSTRUCCIONES, nivelDe, TOPE } from './reglas'
 
+const DE_LA_PERSONA = new Set(['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified'])
 const INICIAL: Estado = { nivel: 'normal', semana: null, cincoHoras: null, renuevaSemana: null, topeMax: null }
 const estado = atom({ plugin: 'presupuesto', key: 'estado' } as const, INICIAL)
 const isAuto = atom({ plugin: 'presupuesto', key: 'isAuto' } as const, true)
@@ -72,13 +73,14 @@ export const register: Register = on => {
     return done
   }).catch(($, e, next) => next(e))
 
-  // En ahorro, una instrucción corta al final del prompt de sistema (después del corte de caché).
-  on('prompt.compose', async ($, e, next) => {
-    const composed = await next(e)
-    if (e.traits.includes('bare') || e.traits.includes('analysis')) return composed
+  // En ahorro, una instrucción corta con cada mensaje de la persona. Va con el mensaje y no en el prompt de sistema:
+  // el nivel cambia a mitad de charla y un cambio en el sistema tiraría la caché de toda la conversación.
+  on('prompt.submit', async ($, e, next) => {
+    const origen = (e.origin as { kind?: string } | undefined)?.kind
+    if (origen !== undefined && !DE_LA_PERSONA.has(origen)) return next(e)
     const texto = INSTRUCCIONES[(await read($, estado)).nivel]
-    if (texto === null || !(await read($, isAuto))) return composed
+    if (texto === null || !(await read($, isAuto))) return next(e)
 
-    return { sections: [...composed.sections, { id: 'presupuesto:ahorro', text: texto, scope: 'session' }] }
+    return next({ ...e, context: [...(e.context ?? []), `<presupuesto>${texto}</presupuesto>`] })
   }).catch(($, e, next) => next(e))
 }

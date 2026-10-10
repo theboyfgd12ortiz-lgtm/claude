@@ -224,9 +224,10 @@ export const hace = (desde: number, ahora: number): string => {
 }
 
 // ── Equipo ──
-const PRECIO_EQUIPO = { haiku: 1, sonnet: 3, opus: 5, otro: 3 } as const
+const PRECIO_EQUIPO = { haiku: 1, sonnet: 20, opus: 40, otro: 20 } as const
+const CACHE_EQUIPO = { haiku: 0.1, sonnet: 0.1, opus: 0.05, otro: 0.1 } as const
 type Trabajo = { nuevo: number; cache: number; escrito: number; familia: keyof typeof PRECIO_EQUIPO; padre: keyof typeof PRECIO_EQUIPO; encargo?: number; respuesta?: number }
-const unidades = (t: Pick<Trabajo, 'nuevo' | 'cache' | 'escrito'>, f: keyof typeof PRECIO_EQUIPO): number => (t.nuevo + t.cache * 0.1 + t.escrito * 5) * PRECIO_EQUIPO[f]
+const unidades = (t: Pick<Trabajo, 'nuevo' | 'cache' | 'escrito'>, f: keyof typeof PRECIO_EQUIPO): number => (t.nuevo + t.cache * CACHE_EQUIPO[f] + t.escrito * 5) * PRECIO_EQUIPO[f]
 
 /**
  * Lo que gastaron los agentes frente a lo que habría costado con el modelo del director (estimación, en unidades relativas).

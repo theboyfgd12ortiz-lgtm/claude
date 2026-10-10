@@ -72,7 +72,6 @@ const memoriaCuando = { plugin: 'memoria', key: 'at' } as const
 const memoriaAuto = { plugin: 'memoria', key: 'isAuto' } as const
 const equipoAgentes = { plugin: 'equipo', key: 'agentes' } as const
 const equipoInvest = { plugin: 'equipo', key: 'investigacion' } as const
-const equipoPlan = { plugin: 'equipo', key: 'plan' } as const
 const equipoAuto = { plugin: 'equipo', key: 'isAuto' } as const
 const equipoAprende = { plugin: 'equipo', key: 'aprendizaje' } as const
 const webInforme = { plugin: 'web', key: 'informe' } as const
@@ -813,7 +812,6 @@ export const register: Register = on => {
       const autoEq = (await $.state.get(equipoAuto)).value ?? true
       const aprendido = Object.entries((await $.state.get(equipoAprende)).value ?? {})
       const costos = equipoCostos(lista)
-      const planEq = (await $.state.get(equipoPlan)).value ?? null
       const COLOR_FAM = { haiku: 'success', sonnet: 'warning', opus: 'error', otro: 'inactive' } as const
       body = !hayEquipo ? (
         <Section title="EQUIPO">
@@ -842,16 +840,6 @@ export const register: Register = on => {
               </Text>
             )}
           </Section>
-
-          {planEq !== null && (
-            <Section title="PLAN EN CURSO">
-              <Text wrap="truncate-end">
-                <Text color={planEq.hechos === planEq.total ? 'success' : 'warning'}>{bar(planEq.hechos, planEq.total, 12)}</Text>{' '}
-                <Text bold>{planEq.hechos} de {planEq.total}</Text> <Text dimColor>pasos hechos</Text>
-              </Text>
-              {planEq.siguiente !== null && <Text wrap="truncate-end" dimColor>Sigue: {planEq.siguiente}</Text>}
-            </Section>
-          )}
 
           <Section title="AGENTES">
             {lista.length === 0 && <Text dimColor>Nadie ha trabajado todavía.</Text>}

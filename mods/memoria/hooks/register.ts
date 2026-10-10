@@ -9,12 +9,15 @@ const cuando = atom({ plugin: 'memoria', key: 'at' } as const, 0)
 
 // Lo que se lee al empezar: se guarda aquí para no leer el archivo en cada petición.
 let notas = ''
+// Lo que va en el prompt de sistema: se fija al empezar (o tras /clear) y no cambia a mitad de charla, porque cualquier cambio ahí tira la caché de toda la conversación.
+let notasFijas = ''
 let ediciones = 0
 let ultimo = 0
 
 const cargar = async ($: EngineInterface) => {
   const t = await $.fs.read(ARCHIVO).catch(() => null)
   notas = t === null ? '' : sinCabecera(t)
+  notasFijas = notas
   await update($, estado, () => contarNotas(notas))
 }
 
@@ -51,9 +54,9 @@ export const register: Register = on => {
   // Una nota por conversación nueva (también tras /clear): lo que Claude lee al empezar.
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    if (notas.trim() === '' || e.traits.includes('bare') || e.traits.includes('analysis')) return composed
+    if (notasFijas.trim() === '' || e.traits.includes('bare') || e.traits.includes('analysis')) return composed
 
-    return { sections: [...composed.sections, { id: 'memoria:proyecto', text: SECCION(notas), scope: 'session' }] }
+    return { sections: [...composed.sections, { id: 'memoria:proyecto', text: SECCION(notasFijas), scope: 'session' }] }
   }).catch(($, e, next) => next(e))
 
   on('classic.SessionStart', async ($, e, next) => {
@@ -88,6 +91,7 @@ export const register: Register = on => {
     if (arg === 'borrar') {
       await $.fs.write(ARCHIVO, '<!-- memoria vacía -->\n').catch(() => undefined)
       notas = ''
+      notasFijas = ''
       await update($, estado, () => 0)
 
       return { text: 'Memoria borrada: Claude ya no recuerda nada de este proyecto.' }

@@ -2,15 +2,15 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Aprendizaje, Investigacion, Registro } from '../types'
-import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, leerPlan, pistaDeEquipo, PIZARRA, PLAN, sumarEntrada } from './contexto'
+import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, pistaDeEquipo, PIZARRA, sumarEntrada } from './contexto'
 import { aprender, esBueno, lecciones } from './aprende'
-import { AGENTES, ahorro, costo, dificultadDe, familiaDe, GUIA, modeloParaAgente, slug } from './reglas'
+import { AGENTES, ahorro, costo, dificultadDe, familiaDe, familiaDeNivel, rango, GUIA, modeloParaAgente, slug } from './reglas'
 
 const agentes = atom({ plugin: 'equipo', key: 'agentes' } as const, [])
 const investigacion = atom({ plugin: 'equipo', key: 'investigacion' } as const, null)
 const isAuto = atom({ plugin: 'equipo', key: 'isAuto' } as const, true)
 const aprendizaje = atom({ plugin: 'equipo', key: 'aprendizaje' } as const, {})
-const plan = atom({ plugin: 'equipo', key: 'plan' } as const, null)
+const selectorNivel = { plugin: 'selector-modelo', key: 'nivel' } as const
 const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
 
 /** De dónde vienen los mensajes de la persona. */
@@ -21,6 +21,9 @@ const MAX_PARALELO = 3
 const MAX_TURNO = 6
 /** Un agente "trabajando" desde hace más de esto se da por colgado y no cuenta. */
 const COLGADO_MS = 15 * 60 * 1000
+
+/** Una investigación que lleva más que esto sin responder se da por perdida y deja pedir otra. */
+const INVESTIGAR_MAX_MS = 10 * 60 * 1000
 
 /** Cuántos agentes se recuerdan para el panel. */
 const MAX = 40
@@ -63,7 +66,15 @@ const guardar = async ($: EngineInterface, i: Investigacion): Promise<string> =>
   return archivo
 }
 
+const guiaConLecciones = (aprendido: string[]): string => (aprendido.length === 0 ? GUIA : `${GUIA}\nLo que el equipo ya aprendió:\n${aprendido.map(l => `- ${l}`).join('\n')}`)
+
 export const register: Register = on => {
+  // La guía tal como se mandó en esta sesión.
+  let guiaFija: string | undefined
+  // La primera entrada de la pizarra de cada sesión la empieza de cero; las demás se escriben una a una.
+  let pizarraNueva = true
+  let colaPizarra: Promise<unknown> = Promise.resolve()
+
   // Lanzamientos en vuelo y en lo que va del turno del director (se cuentan sin esperar, para que los paralelos no se cuelen).
   let reservas = 0
   let lanzadosEnTurno = 0
@@ -75,6 +86,8 @@ export const register: Register = on => {
   let obreros: { familia: string }[] = []
 
   on('session.start', async ($, e, next) => {
+    guiaFija = undefined
+    pizarraNueva = true
     for (const spec of AGENTES) await $.agent.register(spec).catch(() => undefined)
     await $.command.register({
       name: 'equipo',
@@ -97,38 +110,46 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     const origen = (e.origin as { kind?: string } | undefined)?.kind
     if ((origen !== undefined && !PERSONA.has(origen)) || !(await read($, isAuto))) return next(e)
-    const tope = (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax
-    if (tope !== undefined && tope !== null) return next(e)
+    const apretado = typeof (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax === 'number'
     const usage = await $.session.usage().catch(() => null)
-    const avance = await $.fs.read(PLAN).then(r => (typeof r === 'string' ? leerPlan(r) : null), () => null)
-    await update($, plan, () => avance)
-    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0, plan: avance })
+    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, tokens: usage?.context.tokens ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0, apretado })
 
     return next(pista === undefined ? e : { ...e, context: [...(e.context ?? []), pista] })
   }).catch(($, e, next) => next(e))
 
   // Al compactar se conserva el plan y dónde están los resultados.
-  on('session.compact', ($, e, next) => next({ ...e, instructions: e.instructions === undefined ? AVISO_COMPACTAR : `${e.instructions}\n\n${AVISO_COMPACTAR}` })).catch(($, e, next) => next(e))
+  on('session.compact', ($, e, next) => {
+    guiaFija = undefined
+
+    return next({ ...e, instructions: e.instructions === undefined ? AVISO_COMPACTAR : `${e.instructions}\n\n${AVISO_COMPACTAR}` })
+  }).catch(($, e, next) => next(e))
 
   // 1. El director sabe cómo repartir el trabajo.
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
     if (e.traits.includes('bare') || e.traits.includes('analysis') || !(await read($, isAuto))) return composed
-    // Con el presupuesto apretado se trabaja sin lanzar agentes: la guía solo estorbaría.
-    const tope = (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax
-    if (tope !== undefined && tope !== null) return composed
-    const aprendido = lecciones(await read($, aprendizaje))
-    const texto = aprendido.length === 0 ? GUIA : `${GUIA}\nLo que el equipo ya aprendió:\n${aprendido.map(l => `- ${l}`).join('\n')}`
+    // El texto se fija al empezar (y tras compactar): un cambio en el prompt de sistema tira la caché de toda la conversación.
+    guiaFija ??= guiaConLecciones(lecciones(await read($, aprendizaje)))
 
-    return { sections: [...composed.sections, { id: 'equipo:guia', text: texto, scope: 'session' }] }
+    return { sections: [...composed.sections, { id: 'equipo:guia', text: guiaFija, scope: 'session' }] }
   })
 
   // 2. Un agente sin modelo propio corre con el más barato que sirva.
   on('agent.spawn', async ($, e, next) => {
-    const objetivo =
-      e.fork || e.isTeammate === true || e.workflow !== undefined || !(await read($, isAuto))
-        ? undefined
-        : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: e.parentModel ?? '', fork: false, aprendido: (await read($, aprendizaje))[e.subagentType]?.nivel ?? undefined, dificultad: dificultadDe(e.description, e.prompt) })
+    const omitir = e.fork || e.isTeammate === true || e.workflow !== undefined || !(await read($, isAuto))
+    // El director trabaja con el modelo que puso el selector, que puede no ser el de la sesión.
+    const nivelSel = (await $.state.get(selectorNivel).catch(() => undefined))?.value
+    const padreFam = typeof nivelSel === 'number' ? familiaDeNivel(nivelSel) : familiaDe(e.parentModel ?? '')
+    let objetivo = omitir
+      ? undefined
+      : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: padreFam, fork: false, aprendido: (await read($, aprendizaje))[e.subagentType]?.nivel ?? undefined, dificultad: dificultadDe(e.description, e.prompt) })
+    // El tope del presupuesto vale también para los agentes, pida lo que pida quien los lanza.
+    const tope = omitir ? undefined : (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax
+    if (typeof tope === 'number') {
+      const techo = familiaDeNivel(tope)
+      const pedida = objetivo ?? e.model
+      if (rango(pedida === undefined || pedida === '' || pedida === 'inherit' ? padreFam : familiaDe(pedida)) > rango(techo)) objetivo = techo
+    }
     const mide = !(e.fork || e.isTeammate === true || e.workflow !== undefined) && (await read($, isAuto))
     if (mide) {
       const ahora = await $.clock.now()
@@ -161,7 +182,7 @@ export const register: Register = on => {
       descripcion: e.description,
       modelo: lanzado.model,
       familia: familiaDe(lanzado.model),
-      padre: familiaDe(e.parentModel ?? ''),
+      padre: padreFam,
       at: await $.clock.now(),
       fin: null,
       estado: 'trabajando',
@@ -211,14 +232,22 @@ export const register: Register = on => {
       const bueno = esBueno(e.reason, e.answer, reg.tipo)
       if (e.reason === 'answer' && typeof e.answer === 'string' && e.answer.trim() !== '' && !esPrueba) {
         const hoy = new Date(fin).toISOString().slice(11, 16)
-        const previa = await $.fs.read(PIZARRA).then(r => (typeof r === 'string' ? r : ''), () => '')
-        await $.fs.write(PIZARRA, sumarEntrada(previa, entradaPizarra(reg.tipo, reg.descripcion, e.answer, hoy))).catch(() => undefined)
+        const entrada = entradaPizarra(reg.tipo, reg.descripcion, e.answer, hoy)
+        // Una a una: dos agentes que terminan a la vez no pisan la entrada del otro.
+        colaPizarra = colaPizarra.then(async () => {
+          const previa = pizarraNueva ? '' : await $.fs.read(PIZARRA).then(r => (typeof r === 'string' ? r : ''), () => '')
+          pizarraNueva = false
+          await $.fs.write(PIZARRA, sumarEntrada(previa, entrada)).catch(() => undefined)
+        })
+        await colaPizarra.catch(() => undefined)
       }
-      await recordar($, a => aprender(a, reg.tipo, reg.familia, bueno, costo(reg, reg.familia), ahorro(reg)))
+      // Una interrupción (Esc) o un error de la API no dicen nada de la calidad del agente: no se aprende de eso.
+      if (e.reason === 'answer') await recordar($, a => aprender(a, reg.tipo, reg.familia, bueno, costo(reg, reg.familia), ahorro(reg)))
       if (reg.tipo === 'equipo:obrero') obreros = [...obreros, { familia: reg.familia }].slice(-3)
       // El revisor encontró problemas en lo que hicieron los obreros: eso sí es un fallo de ellos.
       if (reg.tipo === 'equipo:revisor' && bueno && typeof e.answer === 'string' && !/TODO BIEN/.test(e.answer) && obreros.length > 0) {
-        const culpables = obreros
+        // Solo el último obrero: el problema puede ser del director o de cualquiera de los anteriores.
+        const culpables = obreros.slice(-1)
         obreros = []
         await recordar($, a => culpables.reduce((acc, o) => aprender(acc, 'equipo:obrero', o.familia, false, 0, 0, false), a))
       }
@@ -281,7 +310,7 @@ export const register: Register = on => {
     }
 
     const antes = await read($, investigacion)
-    if (antes !== null && antes.estado === 'trabajando') return { text: `Ya estoy investigando: ${antes.pregunta}. Espera a que termine.` }
+    if (antes !== null && antes.estado === 'trabajando' && (await $.clock.now()) - antes.at < INVESTIGAR_MAX_MS) return { text: `Ya estoy investigando: ${antes.pregunta}. Espera a que termine.` }
     const ahora = await $.clock.now()
     const nueva: Investigacion = { id: '', pregunta: arg, at: ahora, estado: 'trabajando', texto: '', archivo: null }
     await update($, investigacion, () => nueva)

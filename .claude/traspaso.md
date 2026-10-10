@@ -1,40 +1,39 @@
-<!-- traspaso 2026-10-10T19:11:13.251Z auto -->
+<!-- traspaso 2026-10-10T19:25:41.644Z auto -->
 
 ## Objetivo
-El usuario, no técnico, trabaja en Windows con PowerShell y en la nube. Quiere mods de Claude Code que trabajen solos (sin comandos "/"), ahorren tokens, den resultados excelentes y se vean en un solo panel ("Centro de control"). Ahora la prioridad es que el orquestador `equipo` sea muy bueno y se mejore solo.
+El usuario es una persona no técnica que trabaja en Windows (PowerShell, app de escritorio) y también en la nube. Quiere mods de Claude Code que bajen el costo por tarea y den resultados excelentes. Todo debe ser automático (no recuerda los comandos "/"), visible en un solo panel (`/mods`, Centro de control), actualizarse solo y mejorarse a sí mismo. La prioridad es el orquestador `equipo`.
 
 ## Hecho
-- Repo `theboyfgd12ortiz-lgtm/claude`, rama `claude/adoring-ride-khnvyf`, ya subida.
-- 14 mods en `mods/<nombre>`, registrados en `.claude-plugin/marketplace.json` y `.claude/settings.json`.
-- `mods/equipo`:
-  - Agentes explorador, investigador, obrero y revisor (`hooks/reglas.ts`).
-  - El hook `agent.spawn` pone el modelo barato y respeta la `dificultad:` del encargo.
-  - Límites: 3 agentes a la vez y 6 por tarea.
-  - Aprendizaje en `hooks/aprende.ts`: evalúa cada respuesta por su formato y por lo que dice el revisor; si falla sube Haiku→Sonnet→Opus y tras 8 aciertos baja.
-  - Ahorro neto, ya descontado lo que cuesta delegar.
-  - Pizarra, pistas por mensaje y lectura de `plan.md` en `hooks/contexto.ts`.
-  - Comandos `/equipo [on|off|olvidar|probar]` y `/investigar <pregunta>|ver|guardar`.
-- `mods/mods-panel`: pestaña Equipo con ahorro, agentes, plan en curso, lo aprendido e investigación.
-- `mods/selector-modelo`: se quitó la sección "reparto" y ahora depende de `equipo`.
+- Repo `theboyfgd12ortiz-lgtm/claude`, rama `claude/adoring-ride-khnvyf`, todo subido.
+- Mods en `mods/`: selector-modelo, rtk-hook, guardian, output-trim, quality-coach, token-meter, presupuesto, traspaso, mejorar-prompt, respaldo, web, memoria, equipo, mods-panel. Están registrados en `.claude-plugin/marketplace.json` y `.claude/settings.json`.
+- `mods/equipo/`:
+  - Agentes explorador, investigador, obrero y revisor; el hook `agent.spawn` les pone un modelo más barato que el del director.
+  - Aprende por tipo de agente: 2 fallos de 4 suben un escalón hasta Opus; 8 aciertos seguidos lo bajan. Un fallo es una respuesta sin el formato pedido o un problema que encuentra el revisor.
+  - Calcula el ahorro neto y deja la lección "no sale a cuenta" cuando no ahorra.
+  - Límites: 3 agentes a la vez y 6 por tarea. Ajusta el modelo con `dificultad: baja|media|alta`.
+  - Pizarra en `.claude/equipo/pizarra.md` y seguimiento de `.claude/equipo/plan.md`. Pistas por mensaje según el contexto (50 % y 70 %) y si la tarea es grande.
+  - Comandos `/investigar` (`ver`, `guardar`) y `/equipo` (`on`, `off`, `olvidar`, `probar`), con un reintento si el clasificador del modo automático no da veredicto.
+- `mods/mods-panel`: pestaña Equipo con ahorro, plan, agentes, lo aprendido, investigación y botón Probar.
+- Ya se quitó la sección de reparto de `selector-modelo`.
+- Las pruebas de los 13 mods pasan, `tsc` está limpio y `claude plugin validate .` pasa.
 
 ## Decisiones
-- Las pistas de contexto y de plan viajan con el mensaje (`prompt.submit`), no en el prompt de sistema, para no romper la caché.
-- `general-purpose` no se abarata, para no perder calidad en tareas difíciles.
-- Descartado ampliar `web` con imágenes y datos, porque el usuario lo pidió.
-- El Workflow tool no se usa sin que el usuario lo pida.
-- Si el clasificador del modo automático rechaza un agente lanzado por comando, se reintenta una vez; si vuelve a fallar, se deja la petición escrita para que Claude la lance.
+- Las pistas viajan con el mensaje (`prompt.submit`) y no en el prompt de sistema, para no romper la caché.
+- `general-purpose` no se abarata, para no perder calidad.
+- Se descartaron imágenes y datos en `web`, a pedido del usuario.
+- No se usa el Workflow tool sin que el usuario lo pida explícitamente.
+- Sin `version` en `plugin.json`, para que la actualización automática siga el commit.
 
 ## Pendiente
-1. Que el usuario corra `/equipo probar` en local y en la nube; revisar lo que salga.
-2. Comprobar en sesión real los permisos de `WebSearch` en segundo plano y el porcentaje de contexto que lee el hook.
-3. Ajustar los límites 3/6 según lo que diga el usuario.
-4. Opcional: revisión crítica con Opus de `equipo` v3.
+1. Recibir el plan de Opus (8 a 12 cambios priorizados: fallos, qué eliminar o fusionar, qué integrar) e implementar los marcados "hacer ya".
+2. Que el usuario pruebe `/equipo probar` en su PC y en la nube (no se ha probado en una sesión real).
+3. Revisar si `WebSearch` pide permiso dentro de los agentes.
+4. Tras cada cambio: `tsc`, pruebas de todos los mods, `validate`, commit y push.
 
 ## Datos clave
-- Compilar: `npx -p typescript tsc -p <scratchpad>/tsconfig.all.json`. Ese archivo vive en el scratchpad, que es temporal: en una sesión nueva hay que recrearlo.
-- Probar: `claude plugin test mods/<mod>`. Validar: `claude plugin validate .`
-- Windows: `cd C:\Users\thebo\claude-mods`, luego `git pull origin claude/adoring-ride-khnvyf`, luego `powershell -ExecutionPolicy Bypass -File scripts\install-mods.ps1`.
-- Script de configuración de la nube: `git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/cm && bash /tmp/cm/scripts/cloud-setup.sh`
-- Archivos que crea `equipo` en cada proyecto: `.claude/equipo/plan.md`, `.claude/equipo/pizarra.md`, `.claude/investigaciones/`.
-- `.claude/traspaso.md` cambia solo y hay que hacerle commit.
-- Los mensajes de commit terminan con las líneas Co-Authored-By y Claude-Session.
+- Compilar: `npx -p typescript tsc -p /tmp/claude-0/-home-user-claude/7d3655b8-4bbf-511b-a610-71bb74ffca08/scratchpad/tsconfig.all.json`
+- Probar: `claude plugin test mods/<nombre>` · Validar: `claude plugin validate .`
+- Tipos de la API: `/root/.claude/dev-mods/*/web/.claude-plugin/types/claude-code/index.d.ts`
+- Actualizar en Windows: `cd C:\Users\thebo\claude-mods`, luego `git pull origin claude/adoring-ride-khnvyf` y `powershell -ExecutionPolicy Bypass -File scripts\install-mods.ps1`
+- Nube: `scripts/cloud-setup.sh` (variable `CLAUDE_CODE_PLUGIN_DIRS`).
+- Commits con las líneas Co-Authored-By y Claude-Session.

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, leerPlan, PIZARRA_MAX, pistaDeEquipo, sumarEntrada } from './contexto'
+import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, PIZARRA_MAX, pistaDeEquipo, sumarEntrada } from './contexto'
 
 test('reconoce una tarea grande por tamaño, partes o palabras', () => {
   expect(esTareaGrande('arregla el botón del login')).toBe(false)
@@ -16,8 +16,14 @@ test('la pista depende del contexto y del tamaño; sin nada que decir no añade 
   expect(pistaDeEquipo({ contexto: 55, grande: false, hayPizarra: false })).toMatch(/al 55%.*explorador/)
   expect(pistaDeEquipo({ contexto: 82, grande: false, hayPizarra: true })).toMatch(/al 82%.*pizarra\.md.*\/compact/)
   const g = pistaDeEquipo({ contexto: 10, grande: true, hayPizarra: false })
-  expect(g).toMatch(/plan\.md.*6 agentes.*revisor/)
+  expect(g).toMatch(/TodoWrite.*6 agentes.*revisor/)
   expect(g?.startsWith('<equipo>')).toBe(true)
+})
+
+test('con ventana grande el contexto también se mide en tokens', () => {
+  expect(pistaDeEquipo({ contexto: 12, tokens: 90_000, grande: false, hayPizarra: false })).toMatch(/~90k tokens/)
+  expect(pistaDeEquipo({ contexto: 15, tokens: 160_000, grande: false, hayPizarra: false })).toMatch(/\/compact/)
+  expect(pistaDeEquipo({ contexto: 5, tokens: 20_000, grande: false, hayPizarra: false })).toBeUndefined()
 })
 
 test('la pizarra guarda lo esencial y no pasa de su tope: se van las entradas más viejas', () => {
@@ -33,13 +39,9 @@ test('la pizarra guarda lo esencial y no pasa de su tope: se van las entradas m�
 })
 
 test('al compactar se pide conservar el plan y la pizarra', () => {
-  expect(AVISO_COMPACTAR).toMatch(/plan\.md.*pizarra\.md/)
+  expect(AVISO_COMPACTAR).toMatch(/pizarra\.md/)
 })
 
-test('lee el avance del plan por sus casillas', () => {
-  expect(leerPlan('sin casillas')).toBeNull()
-  const p = leerPlan('# Plan\n- [x] uno\n- [ ] dos\n2) [ ] tres')
-  expect(p).toEqual({ hechos: 1, total: 3, siguiente: 'dos' })
-  expect(leerPlan('- [x] a\n- [X] b')?.siguiente).toBeNull()
-  expect(pistaDeEquipo({ contexto: 0, grande: false, hayPizarra: false, plan: { hechos: 2, total: 2, siguiente: null } })).toBeUndefined()
+test('con el presupuesto apretado la pista manda no delegar', () => {
+  expect(pistaDeEquipo({ contexto: 0, grande: false, hayPizarra: false, apretado: true })).toMatch(/no lances agentes/)
 })

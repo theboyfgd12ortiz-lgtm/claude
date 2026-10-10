@@ -191,3 +191,12 @@ test('las tareas grandes piden un plan visible, las pequeñas no', async () => {
   expect(pideUnPlan({ ...CERO, alcance: 1, razonamiento: 1 })).toBe(false)
   expect(pideUnPlan({ ...CERO, alcance: 1, riesgo: 3 })).toBe(true)
 })
+
+test('con la caché caliente no se cambia de modelo ni de esfuerzo por un escalón; con la fría sí, y subir mucho siempre', () => {
+  const base = { mensajes: 4, contexto: 30_000, alcance: 1 }
+  expect(decidir({ actual: 4, pedido: 5, ...base, fria: false }).nivel).toBe(4)
+  expect(decidir({ actual: 5, pedido: 3, ...base, fria: false }).nivel).toBe(5)
+  expect(decidir({ actual: 4, pedido: 5, ...base, fria: true }).nivel).toBe(5)
+  expect(decidir({ actual: 3, pedido: 6, ...base, fria: false }).nivel).toBe(6)
+  expect(decidir({ actual: 4, pedido: 4, ...base, fria: false }).nota).toBe('')
+})

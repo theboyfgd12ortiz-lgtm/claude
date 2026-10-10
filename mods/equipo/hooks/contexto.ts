@@ -1,9 +1,6 @@
-import type { AvancePlan } from '../types'
-
 // Pizarra y pistas según el tamaño de la tarea y lo lleno que está el contexto: sin `$`, para probarlo directamente.
 
 export const PIZARRA = '.claude/equipo/pizarra.md'
-export const PLAN = '.claude/equipo/plan.md'
 /** Tope de la pizarra en caracteres (unos 1.500 tokens): se conservan las entradas más nuevas. */
 export const PIZARRA_MAX = 6000
 /** Lo que se copia de la respuesta de cada agente. */
@@ -48,36 +45,27 @@ export const esTareaGrande = (texto: string): boolean => {
  * Pista corta que viaja con el mensaje (no en el prompt de sistema: así la caché no se rompe).
  * Devuelve undefined si no hace falta nada.
  */
-export const pistaDeEquipo = (a: { contexto: number; grande: boolean; hayPizarra: boolean; plan?: AvancePlan | null }): string | undefined => {
+export const pistaDeEquipo = (a: { contexto: number; tokens?: number; grande: boolean; hayPizarra: boolean; apretado?: boolean }): string | undefined => {
   const lineas: string[] = []
-  if (a.plan != null && a.plan.siguiente !== null) {
-    lineas.push(`Plan en curso (${PLAN}): ${a.plan.hechos} de ${a.plan.total} pasos hechos. Sigue: ${a.plan.siguiente}. Marca cada paso con [x] al terminarlo.`)
-  }
-  if (a.contexto >= 70) {
-    lineas.push(`El contexto está al ${Math.round(a.contexto)}%: no leas archivos grandes tú. Delega leer y buscar a equipo:explorador${a.hayPizarra ? `, mira ${PIZARRA} antes de releer nada` : ''}, y cuando cierres este paso sugiere /compact.`)
-  } else if (a.contexto >= 50) {
-    lineas.push(`El contexto está al ${Math.round(a.contexto)}%: delega lo que sea leer o buscar mucho a equipo:explorador${a.hayPizarra ? ` y mira ${PIZARRA} antes de releer` : ''}.`)
+  if (a.apretado === true) lineas.push('Presupuesto apretado: no lances agentes ni delegues; trabaja directo y breve.')
+  // La ventana puede ser de 1M: el porcentaje casi nunca llega, así que también se mira en tokens absolutos.
+  const tokens = a.tokens ?? 0
+  const lleno = a.contexto >= 70 || tokens >= 150_000
+  const medio = a.contexto >= 50 || tokens >= 80_000
+  const cuanto = tokens > 0 ? `lleva ~${Math.round(tokens / 1000)}k tokens` : `está al ${Math.round(a.contexto)}%`
+  if (lleno) {
+    lineas.push(`El contexto ${cuanto}: no leas archivos grandes tú. Delega leer y buscar a equipo:explorador${a.hayPizarra ? `, mira ${PIZARRA} antes de releer nada` : ''}, y cuando cierres este paso sugiere /compact.`)
+  } else if (medio) {
+    lineas.push(`El contexto ${cuanto}: delega lo que sea leer o buscar mucho a equipo:explorador${a.hayPizarra ? ` y mira ${PIZARRA} antes de releer` : ''}.`)
   }
   if (a.grande) {
     lineas.push(
-      `Tarea grande: antes de tocar nada escribe el plan en ${PLAN} (pasos con su criterio de "terminado"). Puedes usar hasta 6 agentes, 3 a la vez, uno por paso independiente; cada encargo al obrero debe bastarse solo (objetivo, archivos, qué no tocar, cómo comprobarlo). Los resultados quedan en ${PIZARRA}. Cierra con equipo:revisor.`,
+      `Tarea grande: antes de tocar nada haz el plan con TodoWrite (3 a 7 pasos, cada uno con su criterio de "terminado"). Puedes usar hasta 6 agentes, 3 a la vez, uno por paso independiente; cada encargo al obrero debe bastarse solo (objetivo, archivos, qué no tocar, cómo comprobarlo). Los resultados quedan en ${PIZARRA}. Cierra con equipo:revisor.`,
     )
   }
 
   return lineas.length === 0 ? undefined : `<equipo>${lineas.join(' ')}</equipo>`
 }
 
-/** Lee las casillas del plan ("- [ ] paso" / "- [x] paso"): cuántas van, cuántas hay y cuál sigue. null si no hay casillas. */
-export const leerPlan = (texto: string): AvancePlan | null => {
-  const pasos = texto.split('\n').flatMap(l => {
-    const m = /^\s*(?:[-*]|\d+[.)])\s*\[( |x|X)\]\s*(.+)$/.exec(l)
-
-    return m === null ? [] : [{ hecho: m[1] !== ' ', texto: (m[2] ?? '').trim() }]
-  })
-  if (pasos.length === 0) return null
-
-  return { hechos: pasos.filter(p => p.hecho).length, total: pasos.length, siguiente: pasos.find(p => !p.hecho)?.texto.slice(0, 120) ?? null }
-}
-
 /** Qué debe sobrevivir a una compactación para no perder el trabajo repartido. */
-export const AVISO_COMPACTAR = `Conserva también: el plan del equipo (${PLAN}), que los resultados de los agentes están en ${PIZARRA} y qué pasos del plan están hechos o pendientes.`
+export const AVISO_COMPACTAR = `Conserva también: que los resultados de los agentes están en ${PIZARRA} y qué pasos del plan están hechos o pendientes.`
