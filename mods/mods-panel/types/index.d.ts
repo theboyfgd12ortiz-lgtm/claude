@@ -4,8 +4,8 @@ export type RtkInfo = { version: string; commands: number; saved: number; percen
 export type PanelExtras = {
   /** rtk's programme found and answering; null when it is not installed. */
   rtk: RtkInfo | null
-  /** The caveman plugin's slash commands are present. */
-  hasCaveman: boolean
+  /** Plugins, by name, that have at least one command or skill loaded (caveman, ponytail...). */
+  plugins: string[]
 }
 
 declare module 'claude-code' {

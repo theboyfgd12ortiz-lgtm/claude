@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Instala o actualiza TODO: los mods de este repo, rtk (recorta la salida de los comandos)
-# y caveman (respuestas cortas). Sirve igual en tu PC (Linux/macOS/WSL) y como "setup script"
+# Instala o actualiza TODO: los mods de este repo, rtk y los plugins de terceros
+# (caveman, humanizer, ponytail, token-optimizer). Sirve igual en tu PC (Linux/macOS/WSL) y como "setup script"
 # de un entorno en la nube. Es idempotente: correrlo de nuevo trae lo nuevo.
 #
 # Variables opcionales:
 #   CLAUDE_MODS_REPO=dueño/repo   otro repositorio con los mods
 #   RTK_VERSION=v0.49.0           versión de rtk (probada); súbela cuando quieras actualizarlo
-#   SKIP_RTK=1 / SKIP_CAVEMAN=1   no instalar esa parte
+#   SKIP_RTK=1, SKIP_CAVEMAN=1, SKIP_HUMANIZER=1, SKIP_PONYTAIL=1, SKIP_TOKEN_OPTIMIZER=1
+#                                 no instalar esa parte
+#   WITH_HEADROOM=1               instalar también headroom (solo tiene sentido en tu PC)
 set -uo pipefail
 
 REPO="${CLAUDE_MODS_REPO:-theboyfgd12ortiz-lgtm/claude}"
@@ -45,18 +47,45 @@ install_or_update() { # $1 = plugin@marketplace
 
 for p in $PLUGINS; do install_or_update "${p}@${MARKET}"; done
 
-# --- 2. caveman (plugin de terceros, Apache-2.0; necesita Node 22+) ---------
-if [ "${SKIP_CAVEMAN:-0}" != "1" ]; then
-  if ! command -v node >/dev/null 2>&1; then
-    warn "caveman necesita Node.js y no lo encuentro; sigo sin caveman"
+# --- 2. Plugins de terceros, desde su repositorio original ------------------
+#   caveman          respuestas sin relleno (Apache-2.0, necesita Node)
+#   humanizer        reescribe textos para que no suenen a IA (MIT)
+#   ponytail         la solución más simple que funcione (MIT, necesita Node)
+#   token-optimizer  audita y vigila el gasto de contexto (PolyForm Noncommercial, necesita Python 3)
+add_marketplace() { # $1 = nombre, $2 = dueño/repo
+  if claude plugin marketplace list 2>/dev/null | grep -q "$1"; then
+    claude plugin marketplace update "$1" || warn "no pude actualizar el marketplace $1"
   else
-    if claude plugin marketplace list 2>/dev/null | grep -q "caveman"; then
-      claude plugin marketplace update caveman || warn "no pude actualizar el marketplace de caveman"
-    else
-      claude plugin marketplace add JuliusBrussee/caveman || warn "no pude añadir el marketplace de caveman"
-    fi
-    install_or_update "caveman@caveman"
+    claude plugin marketplace add "$2" || { warn "no pude añadir $2"; return 1; }
   fi
+}
+
+third_party() { # $1 = variable SKIP, $2 = programa que necesita, $3 = marketplace, $4 = repo, $5 = plugin@marketplace
+  [ "${!1:-0}" = "1" ] && return 0
+  if [ -n "$2" ] && ! command -v "$2" >/dev/null 2>&1; then
+    warn "$5 necesita '$2' y no lo encuentro; sigo sin él"
+    return 0
+  fi
+  add_marketplace "$3" "$4" && install_or_update "$5"
+}
+
+PY=$(command -v python3 || command -v python || true)
+third_party SKIP_CAVEMAN node caveman JuliusBrussee/caveman caveman@caveman
+third_party SKIP_HUMANIZER "" humanizer blader/humanizer humanizer@humanizer
+third_party SKIP_PONYTAIL node ponytail DietrichGebert/ponytail ponytail@ponytail
+third_party SKIP_TOKEN_OPTIMIZER "${PY:-python3}" alexgreensh-token-optimizer alexgreensh/token-optimizer token-optimizer@alexgreensh-token-optimizer
+
+# token-optimizer trae su propio recorte de comandos de Bash; rtk ya hace eso (y lo medimos),
+# así que se apaga el de token-optimizer para que no peleen por el mismo comando.
+if [ "${SKIP_RTK:-0}" != "1" ] && [ -n "$PY" ]; then
+  "$PY" - "$HOME/.claude/settings.json" <<'PYEOF' || warn "no pude ajustar ~/.claude/settings.json"
+import json, os, sys
+path = sys.argv[1]
+data = json.load(open(path)) if os.path.exists(path) else {}
+data.setdefault("env", {})["TOKEN_OPTIMIZER_BASH_COMPRESS"] = "0"
+os.makedirs(os.path.dirname(path), exist_ok=True)
+json.dump(data, open(path, "w"), indent=2)
+PYEOF
 fi
 
 # --- 3. rtk (programa de terceros, Apache-2.0): lo usa el mod rtk-hook -------
@@ -74,6 +103,20 @@ if [ "${SKIP_RTK:-0}" != "1" ]; then
     [ -f "$INSTALLER" ] || INSTALLER="${HOME}/.claude/plugins/marketplaces/${MARKET}/mods/rtk-hook/scripts/install-rtk.sh"
     RTK_VERSION="$RTK_VERSION" sh "$INSTALLER" || warn "no pude instalar rtk (Windows: winget install rtk-ai.rtk)"
   fi
+fi
+
+# --- 4. Headroom (opcional, solo en tu PC): WITH_HEADROOM=1 ------------------
+# Es un proxy que pasa TODO el tráfico de Claude Code por tu máquina para comprimirlo.
+# No se activa solo: aquí solo se instala el programa; tú decides cuándo usarlo.
+if [ "${WITH_HEADROOM:-0}" = "1" ]; then
+  if command -v uv >/dev/null 2>&1; then
+    uv tool install --python 3.13 "headroom-ai[all]" || warn "no pude instalar headroom"
+  elif [ -n "$PY" ]; then
+    "$PY" -m pip install --user "headroom-ai[all]" || warn "no pude instalar headroom"
+  else
+    warn "headroom necesita Python 3.10+ o uv"
+  fi
+  say "Headroom instalado. Para usarlo abre Claude así: headroom wrap claude   (y headroom unwrap claude para quitarlo)."
 fi
 
 say ""

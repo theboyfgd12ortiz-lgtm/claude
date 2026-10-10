@@ -11,6 +11,24 @@
         "source": "github",
         "repo": "JuliusBrussee/caveman"
       }
+    },
+    "humanizer": {
+      "source": {
+        "source": "github",
+        "repo": "blader/humanizer"
+      }
+    },
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
+    },
+    "alexgreensh-token-optimizer": {
+      "source": {
+        "source": "github",
+        "repo": "alexgreensh/token-optimizer"
+      }
     }
   },
   "enabledPlugins": {
@@ -21,6 +39,12 @@
     "quality-coach@claude-mods": true,
     "token-meter@claude-mods": true,
     "mods-panel@claude-mods": true,
-    "caveman@caveman": true
+    "caveman@caveman": true,
+    "humanizer@humanizer": true,
+    "ponytail@ponytail": true,
+    "token-optimizer@alexgreensh-token-optimizer": true
+  },
+  "env": {
+    "TOKEN_OPTIMIZER_BASH_COMPRESS": "0"
   }
 }

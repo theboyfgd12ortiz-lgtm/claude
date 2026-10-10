@@ -22,7 +22,7 @@ const selectorModo = { plugin: 'selector-modelo', key: 'modo' } as const
 const selectorHistorial = { plugin: 'selector-modelo', key: 'historial' } as const
 
 const extrasRef = { plugin: 'mods-panel', key: 'extras' } as const
-const extras = atom(extrasRef, { rtk: null, hasCaveman: false })
+const extras = atom(extrasRef, { rtk: null, plugins: [] })
 
 /** Turns the output of `rtk --version` and `rtk gain -f json` into what the panel shows. */
 export const parseRtk = (version: string, gain: string): RtkInfo => {
@@ -59,10 +59,18 @@ const readRtk = async ($: EngineInterface): Promise<RtkInfo | null> => {
 /** Looks again at the programmes the panel reports on (rtk) and the commands present (caveman). */
 const refresh = async ($: EngineInterface) => {
   const rtk = await readRtk($)
-  const names = await $.command.list().then(list => list.map(c => c.name), () => [] as string[])
-  const hasCaveman = names.some(n => n === 'caveman' || n.startsWith('caveman:') || n.includes(':caveman'))
-  await update($, extras, () => ({ rtk, hasCaveman }) satisfies PanelExtras)
+  const list = await $.command.list().catch(() => [])
+  const plugins = [...new Set(list.flatMap(c => [c.plugin ?? '', c.name.split(':')[0] ?? '']))].filter(Boolean)
+  await update($, extras, () => ({ rtk, plugins }) satisfies PanelExtras)
 }
+
+/** Third-party plugins the installer adds, as the panel explains them. */
+export const EXTRAS = [
+  { plugin: 'caveman', title: 'Caveman (respuestas cortas)', what: 'Respondo sin relleno: solo lo necesario y el código exacto. "stop caveman" lo apaga.' },
+  { plugin: 'ponytail', title: 'Ponytail (soluciones simples)', what: 'Busco la solución más corta que funcione, sin código ni abstracciones de más.' },
+  { plugin: 'token-optimizer', title: 'Token Optimizer (auditor)', what: 'Vigila qué llena el contexto y evita releer lo mismo. /token-optimizer da el informe.' },
+  { plugin: 'humanizer', title: 'Humanizer (textos naturales)', what: 'Pídeme "humaniza este texto" y quito lo que suena a IA, sin cambiar lo que dice.' },
+] as const
 
 /** The selector's ladder in short: 1-2 Haiku, 3-5 Sonnet, 6-9 Opus. */
 export const modeloDe = (n: number): string => (n <= 2 ? 'Haiku (barato)' : n <= 5 ? 'Sonnet (equilibrado)' : 'Opus (el más potente)')
@@ -95,7 +103,7 @@ export const snapshot = async ($: EngineInterface) => {
       ultima: ((await $.state.get(selectorHistorial)).value ?? []).at(-1),
     },
     // Which mods with a slash command are installed; an empty set if the listing fails.
-    extras: (await $.state.get(extrasRef)).value ?? { rtk: null, hasCaveman: false },
+    extras: (await $.state.get(extrasRef)).value ?? { rtk: null, plugins: [] },
     commands: new Set(await $.command.list().then(list => list.map(c => c.name), () => [] as string[])),
     meter: {
       ...(await get($.state.get(meterActive))),
@@ -219,10 +227,12 @@ export const register: Register = on => {
           )}
         </Box>
 
-        <Box flexDirection="column">
-          <Head name="Caveman (respuestas cortas)" isOn={s.extras.hasCaveman} />
-          <Text dimColor>Respondo sin relleno: solo lo necesario y el código exacto. Para apagarlo di "stop caveman".</Text>
-        </Box>
+        {EXTRAS.map(x => (
+          <Box flexDirection="column">
+            <Head name={x.title} isOn={s.extras.plugins.includes(x.plugin)} />
+            <Text dimColor>{x.what}</Text>
+          </Box>
+        ))}
 
         <Box flexDirection="column">
           <Head name="Selector de modelos" isOn={hasSelector} label={hasSelector ? (sel.modo === 'auto' ? 'automático' : 'fijo a mano') : undefined} />
@@ -248,7 +258,7 @@ export const register: Register = on => {
           )}
         </Box>
 
-        <Text dimColor>Comandos: /mods este panel · /nivel selector · /guardian off|on · /tokens totales · /caveman</Text>
+        <Text dimColor>Comandos: /mods este panel · /nivel selector · /guardian off|on · /tokens totales · /caveman · /token-optimizer</Text>
         <Text dimColor>Token ≈ ¾ de palabra. "Leídos" = lo que reviso para responder; "escritos" = lo que genero.</Text>
       </Box>
     )
