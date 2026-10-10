@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
 
 import { discardsWork, judgeCommand, judgeSecretPath } from './rules'
 
@@ -57,6 +57,7 @@ describe('rules', () => {
 })
 
 test('denies a destructive Bash call and runs a safe one', async ($, on) => {
+  mock.clock(on)
   on('tool.call', { tool: 'Bash' }, () => ({
     result: { stdout: 'ran', stderr: '', interrupted: false },
   }))
@@ -69,8 +70,8 @@ test('denies a destructive Bash call and runs a safe one', async ($, on) => {
   expect(good.text ?? (good.result as { stdout: string }).stdout).toMatch(/ran/)
 })
 
-test('denies reading a .env file', async ($, on) => {
+test('denies reading a .env file even without a clock', async ($, on) => {
   on('tool.call', { tool: 'Read' }, () => ({ result: 'unused' as never }))
   const res = await $.tool.call({ tool: 'Read', file_path: '/repo/.env' })
-  expect(res.deny).toMatch(/secrets file/)
+  expect(res.deny).toMatch(/secretos/)
 })

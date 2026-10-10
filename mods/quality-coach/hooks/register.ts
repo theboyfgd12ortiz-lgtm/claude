@@ -1,8 +1,18 @@
+import { atom, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import { COMPACT_HINT, isCodeFile, isVerification, RULES } from './rules'
 
+const isActive = atom({ plugin: 'quality-coach', key: 'isActive' } as const, false)
+const stats = atom({ plugin: 'quality-coach', key: 'stats' } as const, { codeTurns: 0, verifiedTurns: 0, lastWarning: null })
+
 export const register: Register = on => {
+  on('session.start', async ($, e, next) => {
+    await update($, isActive, () => true)
+
+    return next(e)
+  })
+
   let edited = new Set<string>()
   let verifications = 0
 
@@ -41,8 +51,16 @@ export const register: Register = on => {
     const done = await next(e)
     if (e.agentId !== undefined || e.reason !== 'answer') return done
 
-    if (edited.size > 0 && verifications === 0) {
-      const names = [...edited].map(path => path.split('/').pop()).slice(0, 5).join(', ')
+    if (edited.size === 0) return done
+    const isVerified = verifications > 0
+    const names = [...edited].map(path => path.split('/').pop()).slice(0, 5).join(', ')
+    await update($, stats, s => ({
+      codeTurns: s.codeTurns + 1,
+      verifiedTurns: s.verifiedTurns + (isVerified ? 1 : 0),
+      lastWarning: isVerified ? s.lastWarning : `${names}: cambiado sin tests, lint ni build`,
+    }))
+
+    if (!isVerified) {
       $.ui.toast(`quality-coach: ${edited.size} archivo(s) de código cambiados (${names}) sin tests, lint ni build`)
       await $.session
         .append({

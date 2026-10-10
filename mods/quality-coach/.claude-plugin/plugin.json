@@ -1,8 +1,9 @@
 {
   "name": "quality-coach",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Better results: short working rules in the system prompt, a warning when code changed with nothing verified, and richer compaction summaries.",
   "author": {
     "name": "theboyfgd12ortiz-lgtm"
-  }
+  },
+  "types": "./types/index.d.ts"
 }

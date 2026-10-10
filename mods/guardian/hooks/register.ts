@@ -1,40 +1,63 @@
-import type { Register } from 'claude-code'
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
+import type { GuardianBlock } from '../types'
 import { discardsWork, judgeCommand, judgeSecretPath } from './rules'
 
 const ASK = 'If the user explicitly wants this, ask them to run it themselves or to type /guardian off.'
 
-export const register: Register = on => {
-  let isPaused = false
+const isActive = atom({ plugin: 'guardian', key: 'isActive' } as const, false)
+const isPaused = atom({ plugin: 'guardian', key: 'isPaused' } as const, false)
+const blocks = atom({ plugin: 'guardian', key: 'blocks' } as const, [])
 
+/** Records the block for the panel, tells the person, and refuses the call. */
+const refuse = async (
+  $: EngineInterface,
+  command: string,
+  why: string,
+  deny: string,
+) => {
+  // The refusal must stand even if the bookkeeping fails.
+  try {
+    const block: GuardianBlock = { at: await $.clock.now(), command: command.slice(0, 120), why }
+    await update($, blocks, list => [...list, block].slice(-20))
+    $.ui.toast(`guardian bloqueó: ${command.slice(0, 60)}`)
+  } catch {
+    // Nothing to record; still refuse.
+  }
+
+  return { deny } as const
+}
+
+export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'guardian',
       description: 'Guardian safety checks: /guardian off | on | status',
       argumentHint: 'off | on | status',
     })
+    await update($, isActive, () => true)
 
     return next(e)
   })
 
   on('command.run', { command: 'guardian' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
-    if (arg === 'off') isPaused = true
-    if (arg === 'on') isPaused = false
-    $.ui.status(isPaused ? 'guardian: en pausa' : undefined)
+    if (arg === 'off') await update($, isPaused, () => true)
+    if (arg === 'on') await update($, isPaused, () => false)
+    const paused = await read($, isPaused)
+    $.ui.status(paused ? 'guardian: en pausa' : undefined)
 
-    return { text: `Guardian está ${isPaused ? 'EN PAUSA en esta sesión (/guardian on para reactivarlo)' : 'ACTIVO'}.` }
+    return { text: `Guardian está ${paused ? 'EN PAUSA en esta sesión (/guardian on para reactivarlo)' : 'ACTIVO'}.` }
   })
 
   // Destructive shell commands.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (isPaused) return next(e)
+    if (await read($, isPaused)) return next(e)
 
     const why = judgeCommand(e.command)
     if (why !== undefined) {
-      $.ui.toast(`guardian bloqueó: ${e.command.slice(0, 60)}`)
-
-      return { deny: `${$.plugin.name}: blocked because ${why}. ${ASK}` }
+      return refuse($, e.command, why, `${$.plugin.name}: blocked: ${why}. ${ASK}`)
     }
 
     if (discardsWork(e.command)) {
@@ -42,12 +65,14 @@ export const register: Register = on => {
       const dirty = status?.stdout.trim() ?? ''
       if (dirty.length > 0) {
         const files = dirty.split('\n').slice(0, 8).join(', ')
+        const reason = `borraría cambios sin commitear (${files})`
 
-        return {
-          deny:
-            `${$.plugin.name}: blocked because this discards uncommitted changes (${files}). ` +
-            'Commit or `git stash` them first, or confirm with the user. ' + ASK,
-        }
+        return refuse(
+          $,
+          e.command,
+          reason,
+          `${$.plugin.name}: blocked: ${reason}. Commit or \`git stash\` them first, or confirm with the user. ${ASK}`,
+        )
       }
     }
 
@@ -55,13 +80,18 @@ export const register: Register = on => {
   }).catch(($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }))
 
   // Secrets read into the conversation.
-  on('tool.call', { tool: 'Read' }, ($, e, next) => {
-    if (isPaused) return next(e)
+  on('tool.call', { tool: 'Read' }, async ($, e, next) => {
+    if (await read($, isPaused)) return next(e)
 
     const why = judgeSecretPath(e.file_path)
 
     return why === undefined
       ? next(e)
-      : { deny: `${$.plugin.name}: not reading ${e.file_path} because ${why}. Refer to variable names, or use the .example file. ${ASK}` }
+      : refuse(
+          $,
+          `Read ${e.file_path}`,
+          why,
+          `${$.plugin.name}: not reading ${e.file_path}: ${why}. Refer to variable names, or use the .example file. ${ASK}`,
+        )
   }).catch(($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }))
 }

@@ -1,9 +1,23 @@
-import type { Register } from 'claude-code'
+import { atom, update } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 import { clean, LIMIT, shrink } from './trim'
 
+const isActive = atom({ plugin: 'output-trim', key: 'isActive' } as const, false)
+const stats = atom({ plugin: 'output-trim', key: 'stats' } as const, { trims: 0, savedChars: 0 })
+
+/** Adds one trim to the session's tally and shows the running total. */
+const record = async ($: EngineInterface, saved: number, isTrim: boolean) => {
+  const after = await update($, stats, s => ({ trims: s.trims + (isTrim ? 1 : 0), savedChars: s.savedChars + Math.max(saved, 0) }))
+  if (isTrim) $.ui.status(`output-trim: ~${Math.round(after.savedChars / 4).toLocaleString('es')} tokens ahorrados`)
+}
+
 export const register: Register = on => {
-  let savedChars = 0
+  on('session.start', async ($, e, next) => {
+    await update($, isActive, () => true)
+
+    return next(e)
+  })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const ran = await next(e)
@@ -16,8 +30,7 @@ export const register: Register = on => {
       if (clean(text).length <= LIMIT) return ran
       const savedAt = await save($, e.tool_use_id, text)
       const short = shrink(text, savedAt)
-      savedChars += text.length - short.length
-      $.ui.status(`output-trim: ~${Math.round(savedChars / 4).toLocaleString('es')} tokens ahorrados`)
+      await record($, text.length - short.length, true)
 
       return { deny: `Command failed. Its output, trimmed:\n${short}` }
     }
@@ -36,8 +49,7 @@ export const register: Register = on => {
 
     const savedAt = isLong ? await save($, e.tool_use_id, `${result.stdout}\n--- stderr ---\n${result.stderr}`) : undefined
     const trimmed = { ...result, stdout: shrink(stdout, savedAt), stderr: shrink(stderr, savedAt) }
-    savedChars += result.stdout.length + result.stderr.length - trimmed.stdout.length - trimmed.stderr.length
-    if (isLong) $.ui.status(`output-trim: ~${Math.round(savedChars / 4).toLocaleString('es')} tokens ahorrados`)
+    await record($, result.stdout.length + result.stderr.length - trimmed.stdout.length - trimmed.stderr.length, isLong)
 
     return { result: trimmed }
   }).catch(($, e, next) => next(e))
@@ -45,7 +57,7 @@ export const register: Register = on => {
 
 /** Keeps the untrimmed output where the model can still grep it; undefined if it cannot be written. */
 const save = async (
-  $: { fs: { write: (path: string, text: string) => Promise<void> } },
+  $: EngineInterface,
   id: string,
   text: string,
 ): Promise<string | undefined> => {

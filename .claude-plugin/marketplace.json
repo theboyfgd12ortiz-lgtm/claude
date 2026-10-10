@@ -6,6 +6,11 @@
   },
   "plugins": [
     {
+      "name": "selector-modelo",
+      "source": "./mods/selector-modelo",
+      "description": "Elige solo el modelo y esfuerzo de cada petición (Haiku → Sonnet → Opus) para gastar lo justo."
+    },
+    {
       "name": "guardian",
       "source": "./mods/guardian",
       "description": "Bloquea comandos destructivos y lecturas de secretos antes de que se ejecuten."
@@ -24,6 +29,11 @@
       "name": "token-meter",
       "source": "./mods/token-meter",
       "description": "Muestra tokens, caché, tiempo y herramientas de cada turno; /tokens para el total."
+    },
+    {
+      "name": "mods-panel",
+      "source": "./mods/mods-panel",
+      "description": "Panel /mods: explica cada mod en español y muestra su estado en vivo."
     }
   ]
 }

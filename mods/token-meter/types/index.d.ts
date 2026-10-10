@@ -12,6 +12,6 @@ export type Totals = { turns: number; input: number; output: number; cacheRead: 
 
 declare module 'claude-code' {
   interface PluginState {
-    'token-meter': { last: TurnStats | null; total: Totals; isHidden: boolean }
+    'token-meter': { isActive: boolean; last: TurnStats | null; total: Totals; isHidden: boolean }
   }
 }

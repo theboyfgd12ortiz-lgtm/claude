@@ -1,8 +1,9 @@
 {
   "name": "output-trim",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Saves tokens: cuts huge Bash outputs to head + tail, strips ANSI noise, keeps the full text in a file.",
   "author": {
     "name": "theboyfgd12ortiz-lgtm"
-  }
+  },
+  "types": "./types/index.d.ts"
 }

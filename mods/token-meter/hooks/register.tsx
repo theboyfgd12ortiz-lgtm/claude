@@ -7,6 +7,7 @@ const EMPTY: Totals = { turns: 0, input: 0, output: 0, cacheRead: 0, cacheWrite:
 
 const last = atom({ plugin: 'token-meter', key: 'last' } as const, null)
 const total = atom({ plugin: 'token-meter', key: 'total' } as const, EMPTY)
+const isActive = atom({ plugin: 'token-meter', key: 'isActive' } as const, false)
 const isHidden = atom({ plugin: 'token-meter', key: 'isHidden' } as const, false)
 
 /** A turn reading this many input tokens or more earns a toast. */
@@ -37,6 +38,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'tokens', description: 'Token use of this session: /tokens [show|hide|reset]' })
+    await update($, isActive, () => true)
 
     return next(e)
   })

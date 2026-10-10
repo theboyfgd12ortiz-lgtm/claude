@@ -33,7 +33,7 @@ export const judgeCommand = (command: string): string | undefined => {
     if (isRecursiveRemove(w)) {
       const target = w.slice(1).find(x => !x.startsWith('-') && x !== 'rm' && ROOTISH.test(x))
       if (target !== undefined) {
-        return `recursive delete of "${target}" would wipe the system or the home folder`
+        return `borrado recursivo de "${target}": borraría el sistema o tu carpeta personal`
       }
     }
 
@@ -41,32 +41,32 @@ export const judgeCommand = (command: string): string | undefined => {
       const isForced = w.some(x => x === '--force' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(x))
       const isLeased = w.some(x => x.startsWith('--force-with-lease') || x.startsWith('--force-if-includes'))
       if (isForced && !isLeased) {
-        return 'force push can overwrite other people\'s commits; use --force-with-lease instead'
+        return 'push forzado: puede sobrescribir commits de otros (usa --force-with-lease)'
       }
       if (/(^|\s)\+?(refs\/heads\/)?(main|master)(\s|$)/.test(segment) && w.some(x => x.startsWith('+'))) {
-        return 'forced refspec onto main/master; use --force-with-lease on a feature branch instead'
+        return 'push forzado sobre main/master (usa --force-with-lease en otra rama)'
       }
     }
 
-    if (/\bmkfs(\.\w+)?\b/.test(segment)) return 'formatting a filesystem'
-    if (/\bdd\b.*\bof=\/dev\/(sd|nvme|hd|disk|xvd|vd)/.test(segment)) return 'writing raw bytes onto a disk device'
-    if (/>\s*\/dev\/(sd|nvme|hd|disk|xvd|vd)\w*/.test(segment)) return 'redirecting output onto a disk device'
-    if (/\bchmod\b.*-R\b.*\b(777|a\+rwx)\b.*\s\/(\s|$)/.test(segment)) return 'making the whole filesystem world-writable'
-    if (/\bchown\b.*-R\b.*\s\/(\s|$)/.test(segment)) return 'changing ownership of the whole filesystem'
+    if (/\bmkfs(\.\w+)?\b/.test(segment)) return 'formatea un disco'
+    if (/\bdd\b.*\bof=\/dev\/(sd|nvme|hd|disk|xvd|vd)/.test(segment)) return 'escribe directamente sobre un disco'
+    if (/>\s*\/dev\/(sd|nvme|hd|disk|xvd|vd)\w*/.test(segment)) return 'escribe directamente sobre un disco'
+    if (/\bchmod\b.*-R\b.*\b(777|a\+rwx)\b.*\s\/(\s|$)/.test(segment)) return 'da permisos totales a todo el sistema'
+    if (/\bchown\b.*-R\b.*\s\/(\s|$)/.test(segment)) return 'cambia el dueño de todo el sistema'
 
     if (READERS.test(w[0] ?? '') && SECRET_FILE.test(segment)) {
-      return 'it reads a secrets file (.env, private key, credentials) into the conversation'
+      return 'lee un archivo de secretos (.env, llave privada, credenciales)'
     }
   }
 
-  if (/:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(command)) return 'fork bomb'
+  if (/:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(command)) return 'bomba fork (cuelga la máquina)'
 
   return undefined
 }
 
 /** Why reading this path must not happen, or undefined when it may. */
 export const judgeSecretPath = (path: string): string | undefined =>
-  SECRET_FILE.test(path) ? 'it is a secrets file (.env, private key, credentials)' : undefined
+  SECRET_FILE.test(path) ? 'es un archivo de secretos (.env, llave privada, credenciales)' : undefined
 
 /** Commands that throw away uncommitted work. */
 export const discardsWork = (command: string): boolean =>
