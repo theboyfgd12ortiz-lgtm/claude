@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Aprendizaje, Investigacion, Registro } from '../types'
+import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, pistaDeEquipo, PIZARRA, sumarEntrada } from './contexto'
 import { aprender, esBueno, lecciones, modeloAprendido } from './aprende'
 import { AGENTES, ahorro, costo, familiaDe, GUIA, modeloParaAgente, slug } from './reglas'
 
@@ -10,6 +11,9 @@ const investigacion = atom({ plugin: 'equipo', key: 'investigacion' } as const, 
 const isAuto = atom({ plugin: 'equipo', key: 'isAuto' } as const, true)
 const aprendizaje = atom({ plugin: 'equipo', key: 'aprendizaje' } as const, {})
 const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
+
+/** De dónde vienen los mensajes de la persona. */
+const PERSONA = new Set(['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified'])
 
 /** Cuántos agentes se recuerdan para el panel. */
 const MAX = 40
@@ -78,6 +82,21 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // Tareas grandes y contexto lleno: una pista corta con el mensaje (fuera del prompt de sistema, para no romper la caché).
+  on('prompt.submit', async ($, e, next) => {
+    const origen = (e.origin as { kind?: string } | undefined)?.kind
+    if ((origen !== undefined && !PERSONA.has(origen)) || !(await read($, isAuto))) return next(e)
+    const tope = (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax
+    if (tope !== undefined && tope !== null) return next(e)
+    const usage = await $.session.usage().catch(() => null)
+    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0 })
+
+    return next(pista === undefined ? e : { ...e, context: [...(e.context ?? []), pista] })
+  }).catch(($, e, next) => next(e))
+
+  // Al compactar se conserva el plan y dónde están los resultados.
+  on('session.compact', ($, e, next) => next({ ...e, instructions: e.instructions === undefined ? AVISO_COMPACTAR : `${e.instructions}\n\n${AVISO_COMPACTAR}` })).catch(($, e, next) => next(e))
+
   // 1. El director sabe cómo repartir el trabajo.
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
@@ -141,7 +160,8 @@ export const register: Register = on => {
         ),
       )
     }
-    if (id === pruebaId) {
+    const esPrueba = id === pruebaId
+    if (esPrueba) {
       pruebaId = undefined
       const ok = e.reason === 'answer' && typeof e.answer === 'string' && e.answer.trim() !== ''
       $.ui.toast(ok ? 'equipo: autoprueba superada, el agente respondió.' : 'equipo: autoprueba falló, el agente no respondió.')
@@ -152,6 +172,11 @@ export const register: Register = on => {
     const reg = lista.find(r => r.id === id)
     if (reg !== undefined) {
       const bueno = esBueno(e.reason, e.answer, reg.tipo)
+      if (e.reason === 'answer' && typeof e.answer === 'string' && e.answer.trim() !== '' && !esPrueba) {
+        const hoy = new Date(fin).toISOString().slice(11, 16)
+        const previa = await $.fs.read(PIZARRA).then(r => (typeof r === 'string' ? r : ''), () => '')
+        await $.fs.write(PIZARRA, sumarEntrada(previa, entradaPizarra(reg.tipo, reg.descripcion, e.answer, hoy))).catch(() => undefined)
+      }
       await recordar($, a => aprender(a, reg.tipo, reg.familia, bueno, costo(reg, reg.familia), ahorro(reg)))
       if (reg.tipo === 'equipo:obrero') obreros = [...obreros, { familia: reg.familia }].slice(-3)
       // El revisor encontró problemas en lo que hicieron los obreros: eso sí es un fallo de ellos.

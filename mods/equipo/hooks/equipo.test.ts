@@ -125,3 +125,34 @@ test('si el clasificador no da veredicto, /equipo probar reintenta una vez', asy
   expect(intentos).toBe(2)
   expect(r.text).toMatch(/Autoprueba lanzada/)
 })
+
+test('un mensaje de tarea grande viaja con la pista del equipo', async ($, on) => {
+  let visto: readonly string[] | undefined
+  on('prompt.submit', (_$, e) => {
+    visto = e.context
+
+    return { text: e.text, context: e.context } as never
+  })
+  on('session.usage', () => ({ value: { context: { percent: 10 } } }) as never)
+  await $.prompt.submit({ text: 'quiero esto:\n- login\n- registro\n- recuperar clave', wait: false, origin: { kind: 'composer' } } as never)
+  expect(visto?.join(' ')).toMatch(/<equipo>Tarea grande/)
+  visto = undefined
+  await $.prompt.submit({ text: 'gracias', wait: false, origin: { kind: 'composer' } } as never)
+  expect(visto ?? []).toEqual([])
+})
+
+test('lo que responde un agente queda en la pizarra', async ($, on) => {
+  on('clock.now', () => ({ value: 1000 }) as never)
+  on('turn.complete', () => ({ text: '' }) as never)
+  on('agent.spawn', (_$, e) => ({ model: e.model ?? 'opus', agentId: 'z1' }) as never)
+  on('fs.read', () => ({ value: '' }) as never)
+  let escrito = ''
+  on('fs.write', (_$, e) => {
+    escrito = (e as { text: string }).text
+
+    return { value: undefined } as never
+  })
+  await $.agent.spawn(SPAWN as never)
+  await $.turn.complete({ agentId: 'z1', reason: 'answer', answer: 'Está en src/login.ts:42', usage: { input_tokens: 5, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } as never)
+  expect(escrito).toMatch(/# Pizarra del equipo[\s\S]*Está en src\/login\.ts:42/)
+})
