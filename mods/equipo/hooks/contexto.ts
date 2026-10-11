@@ -47,7 +47,7 @@ export const esTareaGrande = (texto: string): boolean => {
  */
 export const pistaDeEquipo = (a: { contexto: number; tokens?: number; grande: boolean; hayPizarra: boolean; apretado?: boolean }): string | undefined => {
   const lineas: string[] = []
-  if (a.apretado === true) lineas.push('Presupuesto apretado: no lances agentes ni delegues; trabaja directo y breve.')
+  if (a.apretado === true) lineas.push('Presupuesto apretado: haz solo lo fundamental y sin bajar la calidad. Lo pesado de leer o buscar, a equipo:explorador (barato); máximo 2 agentes y una skill como mucho.')
   // La ventana puede ser de 1M: el porcentaje casi nunca llega, así que también se mira en tokens absolutos.
   const tokens = a.tokens ?? 0
   const lleno = a.contexto >= 70 || tokens >= 150_000

@@ -154,8 +154,12 @@ export const register: Register = on => {
     if (mide) {
       const ahora = await $.clock.now()
       const activos = (await read($, agentes)).filter(r => r.estado === 'trabajando' && ahora - r.at < COLGADO_MS).length
-      if (activos + reservas >= MAX_PARALELO) return { deny: `Ya hay ${MAX_PARALELO} agentes trabajando a la vez. Espera a que termine alguno (o haz tú este paso) y vuelve a pedirlo.` }
-      if (lanzadosEnTurno >= MAX_TURNO) return { deny: `Ya se lanzaron ${MAX_TURNO} agentes en esta tarea: más cuesta más de lo que ahorra. Integra lo que tienes o haz tú el resto.` }
+      // Con el presupuesto apretado, menos agentes: solo lo fundamental.
+      const apretado = typeof (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax === 'number'
+      const maxParalelo = apretado ? 2 : MAX_PARALELO
+      const maxTurno = apretado ? 2 : MAX_TURNO
+      if (activos + reservas >= maxParalelo) return { deny: `Ya hay ${maxParalelo} agentes trabajando a la vez. Espera a que termine alguno (o haz tú este paso) y vuelve a pedirlo.` }
+      if (lanzadosEnTurno >= maxTurno) return { deny: `Ya se lanzaron ${maxTurno} agentes en esta tarea: más cuesta más de lo que ahorra. Integra lo que tienes o haz tú el resto.` }
       reservas += 1
       lanzadosEnTurno += 1
     }

@@ -2,12 +2,15 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Estado } from '../types'
-import { duracion, estaAgotado, ETIQUETA, faltaPara, INSTRUCCIONES, nivelDe, SIN_SKILLS, TOPE } from './reglas'
+import { duracion, estaAgotado, ETIQUETA, faltaPara, INSTRUCCIONES, LIMITE_SKILLS, nivelDe, SKILLS_POR_PEDIDO, TOPE } from './reglas'
 
 const DE_LA_PERSONA = new Set(['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified'])
 const INICIAL: Estado = { nivel: 'normal', semana: null, cincoHoras: null, renuevaSemana: null, topeMax: null }
 const estado = atom({ plugin: 'presupuesto', key: 'estado' } as const, INICIAL)
 const isAuto = atom({ plugin: 'presupuesto', key: 'isAuto' } as const, true)
+
+// Skills cargadas desde el último mensaje de la persona.
+let skillsEnPedido = 0
 
 // El aviso de "ya puedes seguir" (uno solo a la vez).
 let avisoRenovacion: { cancel: () => void } | undefined
@@ -99,16 +102,19 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     const origen = (e.origin as { kind?: string } | undefined)?.kind
     if (origen !== undefined && !DE_LA_PERSONA.has(origen)) return next(e)
+    skillsEnPedido = 0
     const texto = INSTRUCCIONES[(await read($, estado)).nivel]
     if (texto === null || !(await read($, isAuto))) return next(e)
 
     return next({ ...e, context: [...(e.context ?? []), `<presupuesto>${texto}</presupuesto>`] })
   }).catch(($, e, next) => next(e))
 
-  // Con poco límite, abrir una skill gasta lo que queda: se rechaza y Claude sigue con lo pedido.
+  // Con poco límite se puede usar una skill por pedido (las que ayudan a la calidad); la segunda se rechaza.
   on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
     if ((await read($, estado)).nivel === 'normal' || !(await read($, isAuto))) return next(e)
+    if (skillsEnPedido >= SKILLS_POR_PEDIDO) return { deny: LIMITE_SKILLS }
+    skillsEnPedido += 1
 
-    return { deny: SIN_SKILLS }
+    return next(e)
   }).catch(($, e, next) => next(e))
 }

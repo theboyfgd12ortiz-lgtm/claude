@@ -25,21 +25,24 @@ export const INSTRUCCIONES: Record<Nivel, string | null> = {
   normal: null,
   ahorro: `# Modo ahorro (presupuesto)
 Al usuario le queda poco de su límite de uso. Sin bajar la calidad de lo que entregas:
-- Primero lo que pidió la persona, directo: no abras skills ni hagas exploración previa.
+- Primero lo que pidió la persona, directo. Puedes usar una skill si de verdad mejora el resultado (máximo una por pedido, nunca "por si acaso"); nada de exploración previa.
 - Lee solo las líneas que necesitas; no releas archivos ni repitas comandos.
-- No lances subagentes salvo que la tarea lo exija de verdad.
+- Lo pesado de leer o buscar delégalo a equipo:explorador (corre con un modelo barato); máximo 2 agentes.
 - Respuestas cortas: el resultado y lo imprescindible.`,
   critico: `# Modo ahorro máximo (presupuesto)
 Al usuario casi no le queda límite de uso esta semana. Cada token cuenta:
-- Haz solo lo que se pidió, en el mínimo de pasos. Nada de skills, de exploración amplia ni de subagentes.
+- Haz solo lo que se pidió, en el mínimo de pasos. Una skill como mucho, y solo si es imprescindible para la calidad; nada de exploración amplia; si hay que leer mucho, un solo equipo:explorador (barato).
 - Si la tarea es grande, propón hacerla por partes y empieza por la más importante.
 - Respuestas de pocas líneas.`,
 }
 
 export const ETIQUETA: Record<Nivel, string> = { normal: 'normal', ahorro: 'modo ahorro', critico: 'ahorro máximo' }
 
-/** El aviso que recibe Claude cuando intenta abrir una skill con el presupuesto bajo. */
-export const SIN_SKILLS = 'Presupuesto bajo: no cargues skills. Haz directamente lo que pidió la persona, con las herramientas normales.'
+/** Con el presupuesto bajo se permite una skill por pedido: las que ayudan siguen, las de "por si acaso" no. */
+export const SKILLS_POR_PEDIDO = 1
+
+/** El aviso que recibe Claude cuando pide otra skill en el mismo pedido. */
+export const LIMITE_SKILLS = 'Presupuesto bajo: ya cargaste una skill en este pedido. Sigue con ella (o con lo que ya sabes) y no abras otra.'
 
 /** Los milisegundos que faltan para una fecha ISO; null si no hay fecha o ya pasó. */
 export const faltaPara = (iso: string | undefined, ahora: number): number | null => {

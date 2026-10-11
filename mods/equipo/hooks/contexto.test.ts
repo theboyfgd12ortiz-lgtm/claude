@@ -43,5 +43,5 @@ test('al compactar se pide conservar el plan y la pizarra', () => {
 })
 
 test('con el presupuesto apretado la pista manda no delegar', () => {
-  expect(pistaDeEquipo({ contexto: 0, grande: false, hayPizarra: false, apretado: true })).toMatch(/no lances agentes/)
+  expect(pistaDeEquipo({ contexto: 0, grande: false, hayPizarra: false, apretado: true })).toMatch(/solo lo fundamental.*máximo 2 agentes/)
 })

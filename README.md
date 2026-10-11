@@ -102,7 +102,7 @@ Para actualizar, abre una sesión nueva después de cambiar el script o espera a
 
 ## Con el límite casi agotado
 
-Cuando el presupuesto pasa de modo normal a ahorro, `presupuesto` pide a Claude hacer **primero lo que pediste, directo**, y **rechaza abrir skills** (cada skill carga miles de tokens). Los mods deciden antes de que Claude responda; no gastan tokens. En ahorro máximo (95 % del límite) el modelo baja a Haiku (unas 20 veces más barato que Sonnet), y los agentes también. **Si el límite se agota**, te dice cuánto falta para que se renueve y te avisa con una notificación cuando ya puedes seguir; tu trabajo queda guardado por `traspaso` y sigues con `/retomar`.
+Cuando el presupuesto pasa de modo normal a ahorro, `presupuesto` pide a Claude hacer **primero lo que pediste, directo**, y **limita las skills a una por pedido** (cada skill carga miles de tokens): la que ayuda a la calidad se usa, las de "por si acaso" no. Los mods deciden antes de que Claude responda; no gastan tokens. En ahorro máximo (95 % del límite) el modelo baja a Haiku (unas 20 veces más barato que Sonnet), y los agentes también. **Si el límite se agota**, te dice cuánto falta para que se renueve y te avisa con una notificación cuando ya puedes seguir; tu trabajo queda guardado por `traspaso` y sigues con `/retomar`.
 
 ## Lo que conviene saber
 

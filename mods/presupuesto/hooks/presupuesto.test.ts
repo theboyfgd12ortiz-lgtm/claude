@@ -56,7 +56,7 @@ test('con /presupuesto off no limita nada', { plugins: [lector as never] }, asyn
   expect((await $.command.run({ command: 'tope', args: '', ...CMD } as never)).text).toBe('null')
 })
 
-test('con el presupuesto en modo ahorro se rechaza abrir una skill; en normal pasa', async ($, on) => {
+test('con el presupuesto en modo ahorro se permite una skill por pedido; la segunda se rechaza; en normal pasan todas', async ($, on) => {
   const clock = mock.clock(on)
   mock.store(on)
   let semana = 85
@@ -64,17 +64,24 @@ test('con el presupuesto en modo ahorro se rechaza abrir una skill; en normal pa
   on('ui.toast', () => ({ value: undefined }) as never)
   on('turn.complete', () => ({ text: 'ok' }))
   on('tool.call', { tool: 'Skill' }, () => ({ result: { success: true } }) as never)
+  on('prompt.submit', (_$, e) => ({ text: e.text, context: e.context }) as never)
   const turno = { reason: 'answer', answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't' } as never
+  const pedido = () => $.prompt.submit({ text: 'edita el botón', wait: false, origin: { kind: 'composer' } } as never)
+  const skill = (nombre: string) => $.tool.call({ tool: 'Skill', skill: nombre } as never)
 
   await $.turn.complete(turno)
   await clock.advance(0)
-  const bloqueada = await $.tool.call({ tool: 'Skill', skill: 'brainstorming' } as never)
-  expect(bloqueada.deny).toMatch(/Presupuesto bajo: no cargues skills/)
+  await pedido()
+  expect((await skill('frontend-design')).deny).toBeUndefined()
+  expect((await skill('brainstorming')).deny).toMatch(/ya cargaste una skill/)
+  await pedido()
+  expect((await skill('brainstorming')).deny).toBeUndefined()
 
   semana = 10
   await $.turn.complete(turno)
   await clock.advance(0)
-  expect((await $.tool.call({ tool: 'Skill', skill: 'brainstorming' } as never)).deny).toBeUndefined()
+  expect((await skill('a')).deny).toBeUndefined()
+  expect((await skill('b')).deny).toBeUndefined()
 })
 
 test('calcula cuánto falta para que se renueve el límite y cuándo está agotado', () => {
