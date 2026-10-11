@@ -2,6 +2,13 @@
 
 Base para webs de negocios locales con pedidos por WhatsApp. Vite + React + TypeScript + Tailwind v4, 100 % estática.
 
+## Tenerla en tu computador
+1. Instala Node.js 20 o más nuevo (nodejs.org, versión LTS).
+2. Descarga la plantilla: descomprime `plantilla-web.zip`, o con git:
+   `git clone -b claude/optimistic-gates-syzkep https://github.com/theboyfgd12ortiz-lgtm/claude.git` y entra a `claude/plantilla-web`.
+3. En esa carpeta: `npm install` (solo la primera vez) y luego `npm run dev`. Abre http://localhost:5173
+4. Para verla en tu celular (misma red wifi): `npm run celular` y abre la dirección "Network" que aparece.
+
 ## Usar para un negocio nuevo
 1. Copiar la carpeta: `cp -r plantilla-web ../mi-negocio && cd ../mi-negocio && npm i`
 2. Editar `src/data/menu.json`: nombre, WhatsApp (con 57), horario, zonas, pagos, productos y opciones. Los precios nunca van en el código.
@@ -13,6 +20,8 @@ Base para webs de negocios locales con pedidos por WhatsApp. Vite + React + Type
 - Menú por categorías, ficha con opciones (min/max, incluidas gratis), precio en vivo.
 - Carrito (persiste en localStorage), checkout validado, mensaje a WhatsApp con código de pedido.
 - Abierto/Cerrado con hora de Bogotá (incluye franjas que pasan de medianoche).
+- Fuentes autoalojadas solo latín en `public/fonts/` (precargadas).
+- Lighthouse móvil: 99 rendimiento, 100 accesibilidad, 100 buenas prácticas, 100 SEO.
 - `src/lib/pedido.ts` = lógica pura, con pruebas en `pedido.test.ts`.
 
 ## No trae (agregar por proyecto)

@@ -1,17 +1,19 @@
 @import "tailwindcss";
-@import "@fontsource-variable/bricolage-grotesque";
-@import "@fontsource/rubik/400.css";
-@import "@fontsource/rubik/600.css";
+
+/* Fuentes autoalojadas, solo latín (cubre tildes y ñ). Cambiar archivos en public/fonts/. */
+@font-face { font-family: "Titulo"; src: url("/fonts/bricolage.woff2") format("woff2"); font-weight: 200 800; font-display: swap; }
+@font-face { font-family: "Texto"; src: url("/fonts/rubik-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Texto"; src: url("/fonts/rubik-600.woff2") format("woff2"); font-weight: 600 700; font-display: swap; }
 
 /* Tokens: lo primero que se cambia al adaptar la plantilla. */
 @theme {
-  --color-marca: #e63946;
+  --color-marca: #d62839; /* con texto blanco necesita contraste >= 4.5 */
   --color-acento: #ffd23f;
   --color-tinta: #1d1d1b;
   --color-fondo: #fff8f0;
-  --color-ok: #3ba55c;
-  --font-titulo: "Bricolage Grotesque Variable", system-ui, sans-serif;
-  --font-sans: "Rubik", system-ui, sans-serif;
+  --color-ok: #1e7b3c;
+  --font-titulo: "Titulo", system-ui, sans-serif;
+  --font-sans: "Texto", system-ui, sans-serif;
   --radius-caja: 1rem;
 }
 

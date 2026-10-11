@@ -13,7 +13,7 @@ export function useCarrito() {
 
   return {
     lineas,
-    agregar: (l: Omit<Linea, "key">) => setLineas((ls) => [...ls, { ...l, key: crypto.randomUUID() }]),
+    agregar: (l: Omit<Linea, "key">) => setLineas((ls) => [...ls, { ...l, key: Date.now().toString(36) + Math.random().toString(36).slice(2) }]),
     cambiarCantidad: (key: string, delta: number) =>
       setLineas((ls) => ls.map((l) => (l.key === key ? { ...l, cantidad: l.cantidad + delta } : l)).filter((l) => l.cantidad > 0)),
     vaciar: () => setLineas([]),
