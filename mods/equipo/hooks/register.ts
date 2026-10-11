@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Aprendizaje, Investigacion, Registro } from '../types'
-import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, pistaDeEquipo, PIZARRA, sumarEntrada } from './contexto'
+import { avisoCompactar, entradaPizarra, esTareaGrande, pistaDeEquipo, pizarraDe, sumarEntrada } from './contexto'
 import { aprender, esBueno, lecciones } from './aprende'
 import { AGENTES, ahorro, costo, dificultadDe, familiaDe, familiaDeNivel, rango, GUIA, modeloParaAgente, slug } from './reglas'
 
@@ -66,6 +66,13 @@ const guardar = async ($: EngineInterface, i: Investigacion): Promise<string> =>
   return archivo
 }
 
+/** La pizarra de esta terminal: el mod terminales le pone nombre (T1, T2…); sin él, la de siempre. */
+const rutaPizarra = async ($: EngineInterface): Promise<string> => {
+  const t = await $.state.get({ plugin: 'terminales', key: 'estado' } as never).catch(() => undefined)
+
+  return pizarraDe((t as { value?: { yo?: { nombre?: string } | null } } | undefined)?.value?.yo?.nombre)
+}
+
 const guiaConLecciones = (aprendido: string[]): string => (aprendido.length === 0 ? GUIA : `${GUIA}\nLo que el equipo ya aprendió:\n${aprendido.map(l => `- ${l}`).join('\n')}`)
 
 export const register: Register = on => {
@@ -112,16 +119,17 @@ export const register: Register = on => {
     if ((origen !== undefined && !PERSONA.has(origen)) || !(await read($, isAuto))) return next(e)
     const apretado = typeof (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax === 'number'
     const usage = await $.session.usage().catch(() => null)
-    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, tokens: usage?.context.tokens ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0, apretado })
+    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, tokens: usage?.context.tokens ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0, apretado, pizarra: await rutaPizarra($) })
 
     return next(pista === undefined ? e : { ...e, context: [...(e.context ?? []), pista] })
   }).catch(($, e, next) => next(e))
 
   // Al compactar se conserva el plan y dónde están los resultados.
-  on('session.compact', ($, e, next) => {
+  on('session.compact', async ($, e, next) => {
     guiaFija = undefined
+    const aviso = avisoCompactar(await rutaPizarra($))
 
-    return next({ ...e, instructions: e.instructions === undefined ? AVISO_COMPACTAR : `${e.instructions}\n\n${AVISO_COMPACTAR}` })
+    return next({ ...e, instructions: e.instructions === undefined ? aviso : `${e.instructions}\n\n${aviso}` })
   }).catch(($, e, next) => next(e))
 
   // 1. El director sabe cómo repartir el trabajo.
@@ -239,9 +247,10 @@ export const register: Register = on => {
         const entrada = entradaPizarra(reg.tipo, reg.descripcion, e.answer, hoy)
         // Una a una: dos agentes que terminan a la vez no pisan la entrada del otro.
         colaPizarra = colaPizarra.then(async () => {
-          const previa = pizarraNueva ? '' : await $.fs.read(PIZARRA).then(r => (typeof r === 'string' ? r : ''), () => '')
+          const archivo = await rutaPizarra($)
+          const previa = pizarraNueva ? '' : await $.fs.read(archivo).then(r => (typeof r === 'string' ? r : ''), () => '')
           pizarraNueva = false
-          await $.fs.write(PIZARRA, sumarEntrada(previa, entrada)).catch(() => undefined)
+          await $.fs.write(archivo, sumarEntrada(previa, entrada)).catch(() => undefined)
         })
         await colaPizarra.catch(() => undefined)
       }

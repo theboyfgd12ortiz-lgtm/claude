@@ -74,6 +74,11 @@
       "name": "equipo",
       "source": "./mods/equipo",
       "description": "Equipo de agentes: reparte el trabajo pesado a Haiku y Sonnet para gastar menos, y /investigar busca en internet con un agente barato."
+    },
+    {
+      "name": "terminales",
+      "source": "./mods/terminales",
+      "description": "Varias terminales de Claude Code en el mismo proyecto: se ven, se mandan mensajes, no se pisan los archivos y puedes abrir una copia en paralelo."
     }
   ]
 }

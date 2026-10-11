@@ -72,6 +72,7 @@ const memoriaCuando = { plugin: 'memoria', key: 'at' } as const
 const memoriaAuto = { plugin: 'memoria', key: 'isAuto' } as const
 const equipoAgentes = { plugin: 'equipo', key: 'agentes' } as const
 const equipoInvest = { plugin: 'equipo', key: 'investigacion' } as const
+const terminalesEstado = { plugin: 'terminales', key: 'estado' } as const
 const equipoAuto = { plugin: 'equipo', key: 'isAuto' } as const
 const equipoAprende = { plugin: 'equipo', key: 'aprendizaje' } as const
 const webInforme = { plugin: 'web', key: 'informe' } as const
@@ -95,6 +96,7 @@ const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'ahorro', label: 'Ahorro' },
   { id: 'modelo', label: 'Modelo' },
   { id: 'equipo', label: 'Equipo' },
+  { id: 'terminales', label: 'Terminales' },
   { id: 'web', label: 'Web' },
   { id: 'mods', label: 'Mods' },
   { id: 'ayuda', label: 'Ayuda' },
@@ -886,6 +888,42 @@ export const register: Register = on => {
           </Section>
         </Box>
       )
+    } else if (current === 'terminales') {
+      const t = (await $.state.get(terminalesEstado)).value ?? null
+      const otras = t?.otras ?? []
+      body = t === null || t.yo === null ? (
+        <Section title="TERMINALES">
+          <Text dimColor>El mod "terminales" no está instalado. Corre el instalador para tenerlo.</Text>
+        </Section>
+      ) : (
+        <Box flexDirection="column">
+          <Section title="ESTA TERMINAL">
+            <Text wrap="truncate-end">
+              <Text bold color="success">{t.yo.nombre}</Text> <Text dimColor>{t.yo.tarea !== '' ? t.yo.tarea : 'sin tarea todavía (se llena con lo que pidas)'}</Text>
+            </Text>
+          </Section>
+
+          <Section title="LAS OTRAS TERMINALES DE ESTE PROYECTO">
+            {otras.length === 0 && <Text dimColor>No hay otras abiertas. Abre otra terminal en esta carpeta (o una copia con el botón de abajo) y aparecerá aquí.</Text>}
+            {otras.map(o => (
+              <Text key={`term-${o.id}`} wrap="truncate-end">
+                <Text color="warning">●</Text> <Text bold>{o.nombre}</Text> <Text dimColor>{o.tarea !== '' ? o.tarea : 'sin tarea'} · {Object.keys(o.archivos).length} archivos</Text>
+              </Text>
+            ))}
+            <Text dimColor>Se avisan solas si dos tocan el mismo archivo; los mensajes llegan en el siguiente pedido de la otra.</Text>
+          </Section>
+
+          <Section title="TRABAJAR EN PARALELO">
+            <Text wrap="wrap" dimColor>Crea una copia del proyecto en su propia rama para que otra terminal trabaje sin pisarte. Al terminar se junta con git merge.</Text>
+            {Input !== undefined && (
+              <Input key="term-par" label="Nombre " placeholder="arreglar-menu" value="" submitLabel="crear copia" onSubmit={(v: string) => $.command.run({ command: 'terminal', args: `paralelo ${v}` })} />
+            )}
+            {Input !== undefined && (
+              <Input key="term-msg" label="Mensaje " placeholder="T2 ya terminé el encabezado" value="" submitLabel="enviar" onSubmit={(v: string) => $.command.run({ command: 'terminal', args: `enviar ${v}` })} />
+            )}
+          </Section>
+        </Box>
+      )
     } else if (current === 'web') {
       const informeW = (await $.state.get(webInforme)).value
       const serviciosW = (await $.state.get(webServicios)).value ?? []
@@ -1044,6 +1082,14 @@ export const register: Register = on => {
           what: 'Reparte el trabajo pesado a modelos baratos (Haiku, Sonnet), aprende de sus fallos y puede investigar en internet.',
           stat: !x.plugins.includes('equipo') ? 'no instalado' : `${((await $.state.get(equipoAgentes)).value ?? []).length} agentes han trabajado`,
           action: x.plugins.includes('equipo') ? { label: 'Abrir', press: () => update($, tab, () => 'equipo' as const) } : undefined,
+        },
+        {
+          key: 'terminales',
+          on: x.plugins.includes('terminales'),
+          name: 'Terminales',
+          what: 'Varias terminales de Claude Code en el mismo proyecto: se ven, se mandan mensajes y no se pisan los archivos.',
+          stat: !x.plugins.includes('terminales') ? 'no instalado' : `${((await $.state.get(terminalesEstado)).value?.otras ?? []).length} otras abiertas`,
+          action: x.plugins.includes('terminales') ? { label: 'Abrir', press: () => update($, tab, () => 'terminales' as const) } : undefined,
         },
         {
           key: 'web',

@@ -16,7 +16,8 @@
     "respaldo",
     "web",
     "memoria",
-    "equipo"
+    "equipo",
+    "terminales"
   ],
   "types": "./types/index.d.ts"
 }

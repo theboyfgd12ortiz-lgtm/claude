@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, PIZARRA_MAX, pistaDeEquipo, sumarEntrada } from './contexto'
+import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, pizarraDe, PIZARRA_MAX, pistaDeEquipo, sumarEntrada } from './contexto'
 
 test('reconoce una tarea grande por tamaño, partes o palabras', () => {
   expect(esTareaGrande('arregla el botón del login')).toBe(false)
@@ -44,4 +44,11 @@ test('al compactar se pide conservar el plan y la pizarra', () => {
 
 test('con el presupuesto apretado la pista manda no delegar', () => {
   expect(pistaDeEquipo({ contexto: 0, grande: false, hayPizarra: false, apretado: true })).toMatch(/solo lo fundamental.*máximo 2 agentes/)
+})
+
+test('cada terminal tiene su pizarra; sin terminales, la de siempre', () => {
+  expect(pizarraDe('T2')).toBe('.claude/equipo/pizarra-T2.md')
+  expect(pizarraDe(undefined)).toBe('.claude/equipo/pizarra.md')
+  expect(pizarraDe('raro')).toBe('.claude/equipo/pizarra.md')
+  expect(pistaDeEquipo({ contexto: 60, grande: false, hayPizarra: true, pizarra: pizarraDe('T2') })).toMatch(/pizarra-T2\.md/)
 })

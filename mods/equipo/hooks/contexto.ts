@@ -1,6 +1,9 @@
 // Pizarra y pistas según el tamaño de la tarea y lo lleno que está el contexto: sin `$`, para probarlo directamente.
 
 export const PIZARRA = '.claude/equipo/pizarra.md'
+
+/** Cada terminal tiene su pizarra (T1, T2…) para que dos sesiones del mismo proyecto no se pisen. */
+export const pizarraDe = (terminal: string | undefined): string => (terminal !== undefined && /^T\d+$/.test(terminal) ? `.claude/equipo/pizarra-${terminal}.md` : PIZARRA)
 /** Tope de la pizarra en caracteres (unos 1.500 tokens): se conservan las entradas más nuevas. */
 export const PIZARRA_MAX = 6000
 /** Lo que se copia de la respuesta de cada agente. */
@@ -45,7 +48,7 @@ export const esTareaGrande = (texto: string): boolean => {
  * Pista corta que viaja con el mensaje (no en el prompt de sistema: así la caché no se rompe).
  * Devuelve undefined si no hace falta nada.
  */
-export const pistaDeEquipo = (a: { contexto: number; tokens?: number; grande: boolean; hayPizarra: boolean; apretado?: boolean }): string | undefined => {
+export const pistaDeEquipo = (a: { contexto: number; tokens?: number; grande: boolean; hayPizarra: boolean; apretado?: boolean; pizarra?: string }): string | undefined => {
   const lineas: string[] = []
   if (a.apretado === true) lineas.push('Presupuesto apretado: haz solo lo fundamental y sin bajar la calidad. Lo pesado de leer o buscar, a equipo:explorador (barato); máximo 2 agentes y una skill como mucho.')
   // La ventana puede ser de 1M: el porcentaje casi nunca llega, así que también se mira en tokens absolutos.
@@ -54,13 +57,13 @@ export const pistaDeEquipo = (a: { contexto: number; tokens?: number; grande: bo
   const medio = a.contexto >= 50 || tokens >= 80_000
   const cuanto = tokens > 0 ? `lleva ~${Math.round(tokens / 1000)}k tokens` : `está al ${Math.round(a.contexto)}%`
   if (lleno) {
-    lineas.push(`El contexto ${cuanto}: no leas archivos grandes tú. Delega leer y buscar a equipo:explorador${a.hayPizarra ? `, mira ${PIZARRA} antes de releer nada` : ''}, y cuando cierres este paso sugiere /compact.`)
+    lineas.push(`El contexto ${cuanto}: no leas archivos grandes tú. Delega leer y buscar a equipo:explorador${a.hayPizarra ? `, mira ${a.pizarra ?? PIZARRA} antes de releer nada` : ''}, y cuando cierres este paso sugiere /compact.`)
   } else if (medio) {
-    lineas.push(`El contexto ${cuanto}: delega lo que sea leer o buscar mucho a equipo:explorador${a.hayPizarra ? ` y mira ${PIZARRA} antes de releer` : ''}.`)
+    lineas.push(`El contexto ${cuanto}: delega lo que sea leer o buscar mucho a equipo:explorador${a.hayPizarra ? ` y mira ${a.pizarra ?? PIZARRA} antes de releer` : ''}.`)
   }
   if (a.grande) {
     lineas.push(
-      `Tarea grande: antes de tocar nada haz el plan con TodoWrite (3 a 7 pasos, cada uno con su criterio de "terminado"). Puedes usar hasta 6 agentes, 3 a la vez, uno por paso independiente; cada encargo al obrero debe bastarse solo (objetivo, archivos, qué no tocar, cómo comprobarlo). Los resultados quedan en ${PIZARRA}. Cierra con equipo:revisor.`,
+      `Tarea grande: antes de tocar nada haz el plan con TodoWrite (3 a 7 pasos, cada uno con su criterio de "terminado"). Puedes usar hasta 6 agentes, 3 a la vez, uno por paso independiente; cada encargo al obrero debe bastarse solo (objetivo, archivos, qué no tocar, cómo comprobarlo). Los resultados quedan en ${a.pizarra ?? PIZARRA}. Cierra con equipo:revisor.`,
     )
   }
 
@@ -68,4 +71,5 @@ export const pistaDeEquipo = (a: { contexto: number; tokens?: number; grande: bo
 }
 
 /** Qué debe sobrevivir a una compactación para no perder el trabajo repartido. */
-export const AVISO_COMPACTAR = `Conserva también: que los resultados de los agentes están en ${PIZARRA} y qué pasos del plan están hechos o pendientes.`
+export const avisoCompactar = (pizarra: string): string => `Conserva también: que los resultados de los agentes están en ${pizarra} y qué pasos del plan están hechos o pendientes.`
+export const AVISO_COMPACTAR = avisoCompactar(PIZARRA)

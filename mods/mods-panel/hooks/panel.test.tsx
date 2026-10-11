@@ -325,3 +325,36 @@ test('the Equipo tab shows agents, estimated savings, what it learned and the re
   expect(await ui.find({ key: 'eq-ask' })).toBeDefined()
   await ui.unmount()
 })
+
+/** A stand-in for terminales: this terminal is T2 and T1 is working next to it. */
+const terminalesSimulado = {
+  name: 'terminales',
+  register: (on: On) => {
+    on('session.start', async ($, e, next) => {
+      await $.state.set({ plugin: 'terminales', key: 'estado' } as const, {
+        yo: { id: 'b', nombre: 'T2', inicio: 1, ultimo: 2, tarea: 'cambiar los colores del encabezado', archivos: {} },
+        otras: [{ id: 'a', nombre: 'T1', inicio: 1, ultimo: 2, tarea: 'arreglar el login', archivos: { 'src/login.ts': 2 } }],
+        recibidos: 0,
+      })
+
+      return next(e)
+    })
+  },
+}
+
+test('the Terminales tab shows this terminal, the others and a way to open one in parallel', { plugins: [terminalesSimulado] }, async ($, on) => {
+  mock.clock(on)
+  on('command.register', () => ({ value: { command: 'x' } }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('command.list', () => ({ value: [] }) as never)
+  on('session.start', () => ({ cwd: '/r' }) as never)
+  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'tab-terminales' })
+  expect(await ui.find({ type: 'Text', text: /cambiar los colores del encabezado/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /arreglar el login/ })).toBeDefined()
+  expect(await ui.find({ key: 'term-par' })).toBeDefined()
+  expect(await ui.find({ key: 'term-msg' })).toBeDefined()
+  await ui.unmount()
+})
