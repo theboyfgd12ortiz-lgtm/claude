@@ -55,3 +55,24 @@ test('con /presupuesto off no limita nada', { plugins: [lector as never] }, asyn
   expect(off.text).toMatch(/apagado · normal/)
   expect((await $.command.run({ command: 'tope', args: '', ...CMD } as never)).text).toBe('null')
 })
+
+test('con el presupuesto en modo ahorro se rechaza abrir una skill; en normal pasa', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  let semana = 85
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000 }, rateLimits: [{ kind: 'seven_day', percentUsed: semana }] } }) as never)
+  on('ui.toast', () => ({ value: undefined }) as never)
+  on('turn.complete', () => ({ text: 'ok' }))
+  on('tool.call', { tool: 'Skill' }, () => ({ result: { success: true } }) as never)
+  const turno = { reason: 'answer', answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't' } as never
+
+  await $.turn.complete(turno)
+  await clock.advance(0)
+  const bloqueada = await $.tool.call({ tool: 'Skill', skill: 'brainstorming' } as never)
+  expect(bloqueada.deny).toMatch(/Presupuesto bajo: no cargues skills/)
+
+  semana = 10
+  await $.turn.complete(turno)
+  await clock.advance(0)
+  expect((await $.tool.call({ tool: 'Skill', skill: 'brainstorming' } as never)).deny).toBeUndefined()
+})

@@ -94,10 +94,24 @@ Para actualizar, abre una sesión nueva después de cambiar el script o espera a
 
 - `/mods [ahora | ahorro | modelo | mods | ayuda]`: el Centro de control, en la pestaña que digas.
 - `/nivel [auto | 1-9 | tope N]`: el selector de modelo.
+- `/equipo`, `/investigar`, `/gratis`: el equipo de agentes, la investigación en internet y el ayudante gratuito de OmniRoute.
 - `/guardian [off | on]`: pausa o reactiva las protecciones.
 - `/tokens [show | hide | reset]`: totales de la sesión.
 - `/caveman`: modo de respuestas cortas.
 - Estos tres **no hace falta llamarlos**: trabajan solos y todo está en el panel (`/mods`). Si quieres, existen como comandos: `/presupuesto [on | off]`, `/guardar` y `/retomar`, `/mejorar [pedido | on | off]`.
+
+## OmniRoute: modelos gratuitos cuando queda poco límite
+
+[OmniRoute](https://github.com/diegosouzapw/OmniRoute) es un enrutador que tú alojas en tu PC (por defecto en `http://localhost:20128/v1`) y que reparte tus pedidos entre muchos proveedores, varios con plan gratuito. Se conecta de dos formas:
+
+1. **Ayudante gratis dentro de tu sesión (solo texto).** Pon tu clave de OmniRoute en la variable `OMNIROUTE_API_KEY` (PowerShell: `[Environment]::SetEnvironmentVariable('OMNIROUTE_API_KEY','tu-clave','User')`) y reinicia Claude Code. Claude gana la herramienta `mcp__equipo__gratis`, y cuando el presupuesto está apretado se le recuerda usarla para redactar, resumir, traducir o explicar. También puedes llamarla tú: `/gratis <tarea>` y `/gratis estado`. Opcionales: `OMNIROUTE_URL` y `OMNIROUTE_MODEL` (por ejemplo `auto/coding`). Sin la clave, la herramienta no existe y no gasta nada.
+2. **Toda la sesión con modelos gratuitos, cuando ya no te queda límite:** `powershell -ExecutionPolicy Bypass -File scripts\claude-gratis.ps1` (o `bash scripts/claude-gratis.sh`). Abre Claude Code a través de OmniRoute y tus mods siguen activos.
+
+Lo que **no** hace: el ayudante gratis no lee archivos, ni usa herramientas, ni navega; trabaja solo con el texto que Claude le pasa. Un subagente con herramientas (Agent) no se puede enviar a OmniRoute. Y lo que se manda sale a proveedores gratuitos de terceros: el mod rechaza lo que parece una clave o contraseña, pero no mandes datos de tus clientes. Los modelos gratuitos tienen sus propios límites y su calidad no es la de Opus.
+
+## Con el límite casi agotado
+
+Cuando el presupuesto pasa de modo normal a ahorro, `presupuesto` pide a Claude hacer **primero lo que pediste, directo**, y **rechaza abrir skills** (cada skill carga miles de tokens). Los mods deciden antes de que Claude responda; no gastan tokens.
 
 ## Lo que conviene saber
 

@@ -25,14 +25,18 @@ export const INSTRUCCIONES: Record<Nivel, string | null> = {
   normal: null,
   ahorro: `# Modo ahorro (presupuesto)
 Al usuario le queda poco de su límite de uso. Sin bajar la calidad de lo que entregas:
+- Primero lo que pidió la persona, directo: no abras skills ni hagas exploración previa.
 - Lee solo las líneas que necesitas; no releas archivos ni repitas comandos.
 - No lances subagentes salvo que la tarea lo exija de verdad.
 - Respuestas cortas: el resultado y lo imprescindible.`,
   critico: `# Modo ahorro máximo (presupuesto)
 Al usuario casi no le queda límite de uso esta semana. Cada token cuenta:
-- Haz solo lo que se pidió, en el mínimo de pasos. Nada de exploración amplia ni subagentes.
+- Haz solo lo que se pidió, en el mínimo de pasos. Nada de skills, de exploración amplia ni de subagentes.
 - Si la tarea es grande, propón hacerla por partes y empieza por la más importante.
 - Respuestas de pocas líneas.`,
 }
 
 export const ETIQUETA: Record<Nivel, string> = { normal: 'normal', ahorro: 'modo ahorro', critico: 'ahorro máximo' }
+
+/** El aviso que recibe Claude cuando intenta abrir una skill con el presupuesto bajo. */
+export const SIN_SKILLS = 'Presupuesto bajo: no cargues skills. Haz directamente lo que pidió la persona, con las herramientas normales.'

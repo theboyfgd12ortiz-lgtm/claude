@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Estado } from '../types'
-import { ETIQUETA, INSTRUCCIONES, nivelDe, TOPE } from './reglas'
+import { ETIQUETA, INSTRUCCIONES, nivelDe, SIN_SKILLS, TOPE } from './reglas'
 
 const DE_LA_PERSONA = new Set(['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified'])
 const INICIAL: Estado = { nivel: 'normal', semana: null, cincoHoras: null, renuevaSemana: null, topeMax: null }
@@ -82,5 +82,12 @@ export const register: Register = on => {
     if (texto === null || !(await read($, isAuto))) return next(e)
 
     return next({ ...e, context: [...(e.context ?? []), `<presupuesto>${texto}</presupuesto>`] })
+  }).catch(($, e, next) => next(e))
+
+  // Con poco límite, abrir una skill gasta lo que queda: se rechaza y Claude sigue con lo pedido.
+  on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
+    if ((await read($, estado)).nivel === 'normal' || !(await read($, isAuto))) return next(e)
+
+    return { deny: SIN_SKILLS }
   }).catch(($, e, next) => next(e))
 }

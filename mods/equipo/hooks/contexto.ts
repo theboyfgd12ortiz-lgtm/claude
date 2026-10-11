@@ -45,9 +45,10 @@ export const esTareaGrande = (texto: string): boolean => {
  * Pista corta que viaja con el mensaje (no en el prompt de sistema: así la caché no se rompe).
  * Devuelve undefined si no hace falta nada.
  */
-export const pistaDeEquipo = (a: { contexto: number; tokens?: number; grande: boolean; hayPizarra: boolean; apretado?: boolean }): string | undefined => {
+export const pistaDeEquipo = (a: { contexto: number; tokens?: number; grande: boolean; hayPizarra: boolean; apretado?: boolean; gratis?: boolean }): string | undefined => {
   const lineas: string[] = []
   if (a.apretado === true) lineas.push('Presupuesto apretado: no lances agentes ni delegues; trabaja directo y breve.')
+  if (a.apretado === true && a.gratis === true) lineas.push('Para lo que sea solo texto (redactar, resumir, traducir, explicar) usa la herramienta mcp__equipo__gratis: es un modelo gratuito y no gasta tu límite.')
   // La ventana puede ser de 1M: el porcentaje casi nunca llega, así que también se mira en tokens absolutos.
   const tokens = a.tokens ?? 0
   const lleno = a.contexto >= 70 || tokens >= 150_000

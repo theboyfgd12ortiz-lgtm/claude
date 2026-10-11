@@ -299,6 +299,7 @@ const equipoSimulado = {
       await $.state.set({ plugin: 'equipo', key: 'aprendizaje' } as const, {
         'equipo:explorador': { nivel: 'sonnet', recientes: [], seguidos: 0, veces: 5, unidades: 500, subidas: 1, neto: 100 },
       })
+      await $.state.set({ plugin: 'equipo', key: 'gratis' } as const, { estado: 'conectado', llamadas: 3, fallos: 1, ultimo: 'auto/cheap' })
       await $.state.set({ plugin: 'equipo', key: 'investigacion' } as const, { id: 'x', pregunta: 'mejor hosting gratis', at: 1, estado: 'listo', texto: 'Netlify y Vercel.', archivo: null })
 
       return next(e)
@@ -320,6 +321,8 @@ test('the Equipo tab shows agents, estimated savings, what it learned and the re
   expect(await ui.find({ type: 'Text', text: /buscar login/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /ahora con sonnet/ })).toBeDefined()
   expect(await ui.find({ key: 'eq-test' })).toBeDefined()
+  expect(await ui.find({ key: 'eq-omni' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /3 usos · 1 fallos/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Netlify y Vercel/ })).toBeDefined()
   expect(await ui.find({ key: 'eq-save' })).toBeDefined()
   expect(await ui.find({ key: 'eq-ask' })).toBeDefined()
