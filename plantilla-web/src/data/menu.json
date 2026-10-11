@@ -1,0 +1,70 @@
+{
+  "negocio": {
+    "nombre": "Negocio Ejemplo",
+    "eslogan": "Pide fácil, recibe rápido",
+    "ciudad": "Bogotá",
+    "whatsapp": "573001234567",
+    "horario": {
+      "1": [["16:00", "22:00"]],
+      "2": [["16:00", "22:00"]],
+      "3": [["16:00", "22:00"]],
+      "4": [["16:00", "22:00"]],
+      "5": [["16:00", "02:00"]],
+      "6": [["12:00", "15:00"], ["16:00", "02:00"]]
+    },
+    "pedidoMinimo": 15000,
+    "entrega": { "domicilio": true, "recoger": true },
+    "zonas": [
+      { "id": "centro", "nombre": "Centro", "costo": 3000 },
+      { "id": "norte", "nombre": "Norte", "costo": 5000 }
+    ],
+    "pagos": ["Nequi", "Efectivo"]
+  },
+  "categorias": [
+    { "id": "salchipapas", "nombre": "Salchipapas" },
+    { "id": "bebidas", "nombre": "Bebidas" }
+  ],
+  "productos": [
+    {
+      "id": "salchi-clasica",
+      "categoria": "salchipapas",
+      "nombre": "Salchipapa clásica",
+      "descripcion": "Papa a la francesa, salchicha ranchera y queso costeño",
+      "precio": 15000,
+      "disponible": true,
+      "grupos": [
+        {
+          "id": "tam", "nombre": "Tamaño", "min": 1, "max": 1,
+          "opciones": [
+            { "id": "p", "nombre": "Personal", "precio": 0 },
+            { "id": "g", "nombre": "Grande", "precio": 6000 }
+          ]
+        },
+        {
+          "id": "salsas", "nombre": "Salsas", "min": 0, "max": 4, "incluidas": 2,
+          "opciones": [
+            { "id": "rosada", "nombre": "Rosada", "precio": 1000 },
+            { "id": "pina", "nombre": "Piña", "precio": 1000 },
+            { "id": "ajo", "nombre": "Ajo", "precio": 1000 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gaseosa",
+      "categoria": "bebidas",
+      "nombre": "Gaseosa 400 ml",
+      "descripcion": "Bien fría",
+      "precio": 3000,
+      "disponible": true
+    },
+    {
+      "id": "limonada",
+      "categoria": "bebidas",
+      "nombre": "Limonada de coco",
+      "descripcion": "Agotada por hoy",
+      "precio": 7000,
+      "disponible": false
+    }
+  ]
+}

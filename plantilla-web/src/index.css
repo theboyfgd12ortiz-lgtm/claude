@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* Fuentes autoalojadas, solo latín (cubre tildes y ñ). Cambiar archivos en public/fonts/. */
+@font-face { font-family: "Titulo"; src: url("/fonts/bricolage.woff2") format("woff2"); font-weight: 200 800; font-display: swap; }
+@font-face { font-family: "Texto"; src: url("/fonts/rubik-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Texto"; src: url("/fonts/rubik-600.woff2") format("woff2"); font-weight: 600 700; font-display: swap; }
+
+/* Tokens: lo primero que se cambia al adaptar la plantilla. */
+@theme {
+  --color-marca: #d62839; /* con texto blanco necesita contraste >= 4.5 */
+  --color-acento: #ffd23f;
+  --color-tinta: #1d1d1b;
+  --color-fondo: #fff8f0;
+  --color-ok: #1e7b3c;
+  --font-titulo: "Titulo", system-ui, sans-serif;
+  --font-sans: "Texto", system-ui, sans-serif;
+  --radius-caja: 1rem;
+}
+
+body {
+  background: var(--color-fondo);
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+h1, h2, h3 { font-family: var(--font-titulo); text-wrap: balance; font-weight: 800; }
+p { text-wrap: pretty; }
+button, a, input, select, textarea { min-height: 44px; }
+:focus-visible { outline: 3px solid var(--color-tinta); outline-offset: 2px; }
+button:active:not(:disabled) { transform: scale(.96); }
+button { transition: transform 150ms, background-color 150ms; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
