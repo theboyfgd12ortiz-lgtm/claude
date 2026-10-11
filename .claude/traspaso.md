@@ -1,52 +1,40 @@
-<!-- traspaso 2026-10-11T18:49:47.617Z auto -->
+<!-- traspaso 2026-10-11T19:11:59.527Z auto -->
 
 ## Objetivo
-Un usuario no técnico (Windows/PowerShell, también usa la nube) quiere mods de Claude Code que bajen el costo por tarea sin perder calidad. Deben ser automáticos (no recuerda los "/"), verse en un solo panel (Centro de control, `/mods`) y actualizarse solos.
+Mods de Claude Code para un usuario no técnico (Windows/PowerShell y nube): trabajo automático (sin recordar comandos), todo visible en un panel único ("Centro de control"), mínimo costo por tarea y calidad máxima como prioridad. Repo `theboyfgd12ortiz-lgtm/claude`, rama `claude/adoring-ride-khnvyf`.
 
 ## Hecho
-Repo `theboyfgd12ortiz-lgtm/claude`, rama `claude/adoring-ride-khnvyf`, todo subido.
-- Mods en `mods/<nombre>/`:
-  - Previos: selector-modelo, guardian, output-trim, quality-coach, token-meter, presupuesto, traspaso, mejorar-prompt, respaldo, web, memoria, rtk-hook y mods-panel.
-  - Nuevos: equipo y terminales.
-- Equipo hace de orquestador: agentes Haiku/Sonnet, aprendizaje con escalada, ahorro neto con precios reales, dificultad por encargo, máximo 3 agentes a la vez y 6 por tarea, pizarra por terminal, `/investigar` y `/equipo probar`.
-- Terminales coordina sesiones del mismo proyecto: T1/T2, mensajes, aviso al editar el mismo archivo y `/terminal paralelo` con git worktree.
-- Presupuesto con límite bajo:
-  - Permite 1 skill por pedido.
-  - En ahorro máximo baja a Haiku.
-  - Si el límite se agota, avisa cuando se renueva.
-- Selector: no cambia de modelo ni de esfuerzo con la caché caliente (menos de 5 min).
-- Memoria y la guía de equipo quedan fijas durante la sesión.
-- Registro en `.claude-plugin/marketplace.json` y `.claude/settings.json`.
-- Instaladores: `scripts/install-mods.ps1`, `install-mods.sh` y `cloud-setup.sh`. Documentación en `README.md`.
+- `mods/equipo/`: agentes Haiku/Sonnet, aprendizaje con escalada, ahorro neto, límites de agentes, dificultad por encargo, pizarra por terminal, `/investigar`, `/equipo probar`.
+- `mods/piloto/`: un objetivo y se planea, reparte, ejecuta y revisa solo. Revisión obligatoria (`TODO BIEN`, 2 rondas de corrección), tope de 8 continuaciones y frenos.
+- `mods/terminales/`: terminales T1/T2 que se ven y se mandan mensajes, aviso si tocan el mismo archivo, `/terminal paralelo` con git worktree.
+- `mods/selector-modelo/`: no cambia de modelo con la caché caliente; nivel Opus para el director en una misión.
+- `mods/presupuesto/`: Haiku en ahorro máximo, 1 skill por pedido con poco límite, aviso cuando se renueva el límite.
+- `mods/memoria`, `mods/quality-coach`: prompt de sistema fijo; HTML y CSS no cuentan como código.
+- `mods/mods-panel/`: pestañas Equipo (con Piloto) y Terminales.
+- `.claude-plugin/marketplace.json`, `.claude/settings.json` y `README.md` al día.
 
 ## Decisiones
-- OmniRoute se descartó: el usuario no quiere configurar nada a mano.
-- No se bloquean las skills con presupuesto bajo, se limitan a una: bloquearlas bajaba la calidad.
-- `plan.md` se cambió por TodoWrite: daba órdenes contradictorias.
-- `general-purpose` no se abarata: suele ser una tarea difícil.
-- Las pistas viajan con el mensaje y no en el prompt de sistema, para no romper la caché.
-- Los precios relativos son 1:20:40 (Haiku, Sonnet, Opus), verificados con la tabla oficial.
+- Precios reales 1:20:40 y caché, verificados en la skill claude-api.
+- Pistas por mensaje, no en el prompt de sistema, para no romper la caché.
+- Plan único con `TodoWrite`: se quitó `plan.md`, que contradecía.
+- OmniRoute descartado: requería demasiada configuración del usuario.
+- No bloquear skills, solo limitarlas: bloquearlas bajaba la calidad.
+- No usar la herramienta Workflow sin que el usuario la pida explícitamente.
 
 ## Pendiente
-1. Que el usuario actualice y confirme que ya no carga `selector-modelo@inline`. Viene de la carpeta antigua `C:\Users\thebo\.claude\mods`; hay que renombrarla y quitar `CLAUDE_CODE_PLUGIN_DIRS`.
-2. Probar en real `/equipo probar` y `/terminal` con dos terminales abiertas.
-3. Del plan de Opus:
-   - unir los avisos de plan del selector y de mejorar-prompt;
-   - traspaso a partir del resumen de compactación;
-   - aprendizaje guardado por proyecto;
-   - costo real por tarea;
-   - `git pull` automático en la nube.
+1. Comprobar en el PC real: `/equipo probar`, el piloto con un pedido real y el panel.
+2. Confirmar que se quitó el selector antiguo `selector-modelo@inline` (`C:\Users\thebo\.claude\mods`).
+3. Ideas de Opus aún sin hacer: un solo enrutador de avisos, `traspaso` desde el resumen de compactación, aprendizaje por proyecto, costo real por tarea, verificación sin tokens, `git pull` automático en la nube.
 
 ## Datos clave
-- Actualizar en PowerShell:
-  - `cd C:\Users\thebo\claude-mods`
-  - `git pull origin claude/adoring-ride-khnvyf`
-  - `powershell -ExecutionPolicy Bypass -File scripts\install-mods.ps1`
-  - Después, reiniciar Claude Code.
+- Actualizar en el PC:
+  `cd C:\Users\thebo\claude-mods` → `git pull origin claude/adoring-ride-khnvyf` → `powershell -ExecutionPolicy Bypass -File scripts\install-mods.ps1`, y reiniciar Claude Code.
 - Diagnóstico: `claude plugin list`.
-- Validar todo:
-  - `claude plugin validate .`
-  - `claude plugin test mods/<nombre>`
-  - `tsc` con `tsconfig.all.json` (está en el scratchpad).
-- Atribución de commits: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` y la línea `Claude-Session`.
-- No usar la herramienta Workflow sin pedido explícito del usuario.
+- Validar: `claude plugin validate .` y `claude plugin test mods/<nombre>`.
+- Tipos: `npx -p typescript tsc -p <scratchpad>/tsconfig.all.json`.
+- Nube (setup script): `git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/cm && bash /tmp/cm/scripts/cloud-setup.sh`.
+- Reglas de la API de mods:
+  - Las funciones que reciben `$` deben declararse a nivel del archivo.
+  - Las claves de `$.state` y los nombres de `$.env` van como literales.
+  - Los hooks de prueba se registran antes del primer `$`.
+- Commits con las líneas `Co-Authored-By` y `Claude-Session`.
