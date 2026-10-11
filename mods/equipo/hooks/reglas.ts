@@ -48,6 +48,7 @@ export const MODELO_POR_TIPO: Record<string, 'haiku' | 'sonnet'> = {
   'equipo:investigador': 'haiku',
   'equipo:obrero': 'sonnet',
   'equipo:revisor': 'sonnet',
+  'equipo:arreglador': 'sonnet',
   // Explore de siempre heredaría el costo del director. general-purpose no se toca: lo suele lanzar quien ya decidió que la tarea es difícil.
   Explore: 'haiku',
 }
@@ -142,10 +143,27 @@ ${FORMATO}`,
     maxTurns: 30,
   },
   {
+    name: 'arreglador',
+    description: 'Arregla una prueba, compilación o lint que falla: dale el comando y el error. Hace el arreglo mínimo y lo vuelve a correr hasta que pase.',
+    prompt: `Eres el arreglador del equipo. Recibes un comando que falla y su error, y lo dejas funcionando.
+- Reproduce el fallo corriendo el comando. Busca la causa de raíz leyendo solo lo necesario; no adivines.
+- Haz el cambio mínimo que lo arregla, en el estilo del código que ya existe. Nunca borres, saltes ni debilites una prueba para que pase.
+- Vuelve a correr el comando. Si sigue fallando, prueba otra causa; máximo 3 intentos y, si no sale, di exactamente qué probaste y qué crees que pasa.
+- Responde con máximo 100 palabras: la causa, qué cambiaste (rutas) y el resultado de volver a correrlo.
+${FORMATO}`,
+    tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash'],
+    disallowedTools: ['Agent'],
+    model: 'sonnet',
+    effort: 'medium',
+    maxTurns: 20,
+    omitClaudeMd: true as const,
+  },
+  {
     name: 'revisor',
     description: 'Revisa lo que se hizo (cambios, página, código) antes de darlo por terminado y avisa de errores. No modifica nada.',
     prompt: `Eres el revisor del equipo. Revisas el trabajo hecho y buscas lo que está mal: errores, casos que no se probaron, cosas que no cumplen lo pedido, claves o datos expuestos.
 - Mira los cambios con git diff y lee los archivos tocados. No modifiques nada.
+- Además de lo funcional, mira la seguridad: claves o datos expuestos, entradas de usuario sin validar o sin escapar (formularios, URLs, SQL, HTML), permisos o rutas de archivo mal controlados, dependencias dudosas.
 - Responde con máximo 150 palabras: una lista de problemas, cada uno con el archivo, qué pasa y por qué importa, ordenados del más grave al menos. Si todo está bien, responde exactamente: TODO BIEN.
 ${FORMATO}`,
     tools: ['Read', 'Grep', 'Glob', 'Bash'],
@@ -163,6 +181,7 @@ Tú diriges (si la tarea es grande, planifica antes en pasos cortos). Para traba
 - equipo:explorador (Haiku): buscar o leer en muchos archivos. Pídele rutas y líneas, no archivos enteros.
 - equipo:investigador (Haiku): buscar en internet; devuelve resumen con fuentes.
 - equipo:obrero (Sonnet): hacer UN paso claro. Dale una especificación completa y autosuficiente (archivos, qué cambiar, cuándo está listo): no ve esta conversación.
+- equipo:arreglador (Sonnet): cuando una prueba, compilación o lint falla: dale el comando y el error.
 - equipo:revisor (Sonnet): solo si cambiaste 3 o más archivos de código; en cambios pequeños revisa tú.
 2. Lanza en paralelo lo independiente (varias llamadas Agent en el mismo mensaje).
 3. En la descripción de cada encargo escribe "dificultad: baja", "media" o "alta": el equipo ajusta el modelo (baja = más barato, alta = un escalón más fuerte). Pon primero lo que bloquea a los demás pasos.

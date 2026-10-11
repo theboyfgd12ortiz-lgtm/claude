@@ -102,6 +102,21 @@ Para actualizar, abre una sesión nueva después de cambiar el script o espera a
 - `/caveman`: modo de respuestas cortas.
 - Estos tres **no hace falta llamarlos**: trabajan solos y todo está en el panel (`/mods`). Si quieres, existen como comandos: `/presupuesto [on | off]`, `/guardar` y `/retomar`, `/mejorar [pedido | on | off]`.
 
+## El método de Everything Claude Code, sin su peso
+
+[Everything Claude Code](https://github.com/affaan-m/everything-claude-code) (ECC) trabaja con un bucle: planear, pruebas primero, implementar, revisar con contexto limpio, verificar y guardar lo aprendido. Instalarlo entero suma 71 agentes y 119 skills, que gastan tokens en cada mensaje; por eso aquí se aplicó el **método**, no el paquete:
+
+| ECC | Aquí |
+|---|---|
+| `/plan` (planner) | el piloto planea con `TodoWrite` |
+| `tdd-workflow` | el piloto pide **pruebas primero** si el proyecto tiene suite; si no, comprobar a mano |
+| `build-error-resolver` | agente **`equipo:arreglador`** (Sonnet): arregla lo que falla y lo vuelve a correr |
+| `code-reviewer` + `security-reviewer` | **`equipo:revisor`** (contexto limpio), que ahora mira también seguridad |
+| `/verify` | comprobación obligatoria antes de dar por terminado |
+| `/save-session`, `/resume-session` | `traspaso` |
+| `continuous-learning` (instintos) | `memoria` apunta también tus correcciones y preferencias como reglas cortas; `equipo` aprende qué modelo usar |
+| `/strategic-compact`, `/context-budget` | `selector-modelo`, `presupuesto` y el panel |
+
 ## Con el límite casi agotado
 
 Cuando el presupuesto pasa de modo normal a ahorro, `presupuesto` pide a Claude hacer **primero lo que pediste, directo**, y **limita las skills a una por pedido** (cada skill carga miles de tokens): la que ayuda a la calidad se usa, las de "por si acaso" no. Los mods deciden antes de que Claude responda; no gastan tokens. En ahorro máximo (95 % del límite) el modelo baja a Haiku (unas 20 veces más barato que Sonnet), y los agentes también. **Si el límite se agota**, te dice cuánto falta para que se renueve y te avisa con una notificación cuando ya puedes seguir; tu trabajo queda guardado por `traspaso` y sigues con `/retomar`.

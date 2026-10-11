@@ -19,18 +19,35 @@ export const esTareaGrande = (texto: string): boolean => {
   return t.length >= 600 || partes >= 3 || PALABRAS_GRANDES.test(t) || CREAR.test(t)
 }
 
+/** Si el package.json define un script de pruebas de verdad (no el "no test specified" que npm pone por defecto). */
+export const hayPruebasEnPackage = (texto: string): boolean => {
+  try {
+    const test = (JSON.parse(texto) as { scripts?: { test?: unknown } }).scripts?.test
+
+    return typeof test === 'string' && test.trim() !== '' && !/no test specified/i.test(test)
+  } catch {
+    return false
+  }
+}
+
 export const recortar = (texto: string, n: number): string => {
   const limpio = texto.replace(/\s+/g, ' ').trim()
 
   return limpio.length > n ? `${limpio.slice(0, n)}…` : limpio
 }
 
-/** Lo que se le dice a Claude al empezar una misión (corto: va con el mensaje, no en el prompt de sistema). */
-export const protocolo = (objetivo: string): string =>
+/**
+ * Lo que se le dice a Claude al empezar una misión (corto: va con el mensaje, no en el prompt de sistema).
+ * Sigue el método de Everything Claude Code: plan, pruebas primero, revisión con contexto limpio, verificar, apuntar lo aprendido.
+ */
+export const protocolo = (objetivo: string, tienePruebas = false): string =>
   `<piloto>Misión: ${recortar(objetivo, 400)}. Trabaja de principio a fin sin pedirme confirmaciones, salvo que algo bloquee de verdad (si dudas, elige lo razonable y dilo en una línea). ` +
   '1) Haz el plan con TodoWrite: 3 a 8 pasos, cada uno con su criterio de "terminado". ' +
   '2) Ejecuta paso a paso como director: lo pesado de leer, buscar o hacer repártelo con el equipo (equipo:explorador, equipo:obrero, equipo:investigador), con "dificultad: baja|media|alta" en cada encargo; lo pequeño hazlo tú. Marca cada paso al terminarlo. ' +
-  '3) Al final pasa equipo:revisor y dame un resumen de 5 líneas: qué hiciste, cómo lo comprobaste y qué falta.</piloto>'
+  (tienePruebas
+    ? 'Método: pruebas primero. En cada cambio de código escribe o ajusta una prueba que falle, haz que pase con el cambio mínimo y corre toda la suite antes del siguiente paso; si algo falla, equipo:arreglador. '
+    : 'No hay suite de pruebas: comprueba cada paso de otra forma (ejecuta el código, abre el resultado, mira enlaces y vista de celular) y dime qué viste. ') +
+  '3) Al final pasa equipo:revisor (si tocaste formularios, claves, red, archivos o permisos, que revise también la seguridad) y dame un resumen de 5 líneas: qué hiciste, cómo lo comprobaste y qué falta.</piloto>'
 
 export const textoContinuar = (hechos: number, total: number, siguiente: string): string =>
   `Piloto: sigue con el paso ${hechos + 1} de ${total}: ${recortar(siguiente, 160)}. Reparte con el equipo lo que sea pesado y marca el paso al terminar.`

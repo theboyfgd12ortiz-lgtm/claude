@@ -22,7 +22,7 @@ export const cumpleContrato = (tipo: string, answer: string): boolean => {
   if (tipo === 'equipo:explorador' || tipo === 'Explore') return /[\w-]+\.\w{1,5}\b|\/\w|:\d+|no (lo )?encontr|no hay/i.test(t)
   if (tipo === 'equipo:investigador') return /https?:\/\/|fuentes?:/i.test(t)
   if (tipo === 'equipo:revisor') return /TODO BIEN|^\s*(?:[-*•]|\d+[.)])/m.test(t)
-  if (tipo === 'equipo:obrero') return t.length >= 20
+  if (tipo === 'equipo:obrero' || tipo === 'equipo:arreglador') return t.length >= 20
 
   return true
 }

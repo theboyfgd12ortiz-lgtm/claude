@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Mision, Paso } from '../types'
-import { decidir, esTareaGrande, MAX_CONTINUACIONES, protocolo, recortar, resumenPlan } from './reglas'
+import { decidir, esTareaGrande, hayPruebasEnPackage, MAX_CONTINUACIONES, protocolo, recortar, resumenPlan } from './reglas'
 
 const VACIA: Mision = { activa: false, objetivo: '', hechos: 0, total: 0, siguiente: null, continuaciones: 0, max: MAX_CONTINUACIONES, fin: '', revision: 'sin revisar' }
 const mision = atom({ plugin: 'piloto', key: 'mision' } as const, VACIA)
@@ -19,6 +19,14 @@ let yaRevisado = false
 let veredicto: 'ok' | 'problemas' | null = null
 let rondas = 0
 let sinVeredicto = 0
+
+/** Si el proyecto tiene una suite de pruebas: entonces la misión trabaja con pruebas primero. */
+const hayPruebas = async ($: EngineInterface): Promise<boolean> => {
+  for (const f of ['pytest.ini', 'tox.ini', 'conftest.py', 'go.mod', 'Cargo.toml', 'phpunit.xml']) if (await $.fs.exists(f).catch(() => false)) return true
+  const pkg = await $.fs.read('package.json').then(r => (typeof r === 'string' ? r : ''), () => '')
+
+  return hayPruebasEnPackage(pkg)
+}
 
 /** Si la respuesta de ese agente es del revisor (según el mod equipo); sin equipo, cualquier agente cuenta. */
 const esRevisor = async ($: EngineInterface, id: string): Promise<boolean> => {
@@ -80,7 +88,7 @@ export const register: Register = on => {
     await empezar($, e.text)
     $.ui.toast('Piloto: lo llevo de principio a fin. Para frenarlo: /piloto parar')
 
-    return next({ ...e, context: [...(e.context ?? []), protocolo(e.text)] })
+    return next({ ...e, context: [...(e.context ?? []), protocolo(e.text, await hayPruebas($))] })
   }).catch(($, e, next) => next(e))
 
   // Al terminar el turno del director: si quedan pasos, sigue solo; si no, cierra la misión.
@@ -149,7 +157,7 @@ export const register: Register = on => {
       }
     }
     await empezar($, arg)
-    void $.prompt.submit({ text: `${arg}\n\n${protocolo(arg)}`, wait: false } as never).catch(() => undefined)
+    void $.prompt.submit({ text: `${arg}\n\n${protocolo(arg, await hayPruebas($))}`, wait: false } as never).catch(() => undefined)
 
     return { text: 'Piloto en marcha. Planea, reparte con el equipo y avanza solo; te aviso al terminar. /piloto parar lo frena.' }
   })

@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { decidir, esTareaGrande, MAX_CONTINUACIONES, MAX_RONDAS, protocolo, resumenPlan, TEXTO_PLAN, TEXTO_REVISION } from './reglas'
+import { decidir, esTareaGrande, hayPruebasEnPackage, MAX_CONTINUACIONES, MAX_RONDAS, protocolo, resumenPlan, TEXTO_PLAN, TEXTO_REVISION } from './reglas'
 
 const base = { activa: true, razon: 'answer', continuaciones: 0, max: MAX_CONTINUACIONES, total: 4, hechos: 1, siguiente: 'conectar el formulario', presupuesto: 'normal', repeticiones: 0, yaRevisado: false, veredicto: null as 'ok' | 'problemas' | null, rondas: 0, sinVeredicto: 0 }
 
@@ -146,4 +146,12 @@ test('un pedido corto no arranca nada y /piloto parar frena una misión', async 
   await $.turn.complete(turno())
   await clock.advance(0)
   expect(enviados.length).toBe(antes)
+})
+
+test('el protocolo pide pruebas primero si hay suite, y comprobar a mano si no', () => {
+  expect(protocolo('x', true)).toMatch(/pruebas primero.*equipo:arreglador/)
+  expect(protocolo('x', false)).toMatch(/No hay suite de pruebas/)
+  expect(hayPruebasEnPackage('{"scripts":{"test":"vitest"}}')).toBe(true)
+  expect(hayPruebasEnPackage('{"scripts":{"test":"echo \\"Error: no test specified\\" && exit 1"}}')).toBe(false)
+  expect(hayPruebasEnPackage('no es json')).toBe(false)
 })

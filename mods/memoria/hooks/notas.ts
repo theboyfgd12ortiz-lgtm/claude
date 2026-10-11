@@ -16,7 +16,7 @@ ${actuales.trim() === '' ? '(todavía no hay)' : actuales.trim()}
 
 Reglas:
 - Devuelve la lista COMPLETA ya actualizada, solo con viñetas que empiezan con "- ", máximo 15 viñetas y 2000 caracteres, en español.
-- Incluye solo hechos duraderos que ahorren tiempo en el futuro: tecnologías y estructura, cómo ejecutar, probar y publicar, convenciones del proyecto, decisiones tomadas con su porqué en pocas palabras, datos del cliente o del negocio, errores que no hay que repetir.
+- Incluye solo hechos duraderos que ahorren tiempo en el futuro: tecnologías y estructura, cómo ejecutar, probar y publicar, convenciones del proyecto, decisiones tomadas con su porqué en pocas palabras, datos del cliente o del negocio, errores que no hay que repetir y las correcciones o preferencias que la persona expresó (qué no quiere, cómo prefiere las cosas), como reglas cortas y concretas.
 - No incluyas nada temporal (lo que se está haciendo ahora), código, ni claves, contraseñas o tokens.
 - Si algo de las notas actuales ya no es cierto, corrígelo o quítalo. Si dos notas dicen lo mismo, únelas.
 - Si de esta conversación no hay nada nuevo que valga la pena apuntar, responde exactamente ${SIN_CAMBIOS}.
