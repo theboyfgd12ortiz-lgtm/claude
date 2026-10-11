@@ -1,8 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { decidir, esTareaGrande, MAX_CONTINUACIONES, protocolo, resumenPlan, TEXTO_PLAN, TEXTO_REVISION } from './reglas'
+import { decidir, esTareaGrande, MAX_CONTINUACIONES, MAX_RONDAS, protocolo, resumenPlan, TEXTO_PLAN, TEXTO_REVISION } from './reglas'
 
-const base = { activa: true, razon: 'answer', continuaciones: 0, max: MAX_CONTINUACIONES, total: 4, hechos: 1, siguiente: 'conectar el formulario', presupuesto: 'normal', repeticiones: 0, yaRevisado: false }
+const base = { activa: true, razon: 'answer', continuaciones: 0, max: MAX_CONTINUACIONES, total: 4, hechos: 1, siguiente: 'conectar el formulario', presupuesto: 'normal', repeticiones: 0, yaRevisado: false, veredicto: null as 'ok' | 'problemas' | null, rondas: 0, sinVeredicto: 0 }
 
 test('reconoce un pedido grande por tamaño, partes o palabras', () => {
   expect(esTareaGrande('cambia el color del botón')).toBe(false)
@@ -32,10 +32,31 @@ test('sin plan lo pide una vez; si aun así no hay, la tarea era corta y termina
   expect(decidir({ ...base, total: 0, hechos: 0, siguiente: null, continuaciones: 1 })).toEqual({ accion: 'terminar', motivo: 'listo' })
 })
 
-test('al acabar los pasos pide una revisión; revisado, termina; un plan corto termina directo', () => {
-  expect(decidir({ ...base, hechos: 4, siguiente: null })).toEqual({ accion: 'continuar', texto: TEXTO_REVISION, revision: true })
-  expect(decidir({ ...base, hechos: 4, siguiente: null, yaRevisado: true })).toEqual({ accion: 'terminar', motivo: 'listo' })
+test('al acabar los pasos pide la revisión; con TODO BIEN termina aprobado; un plan corto termina directo', () => {
+  const hecho = { ...base, hechos: 4, siguiente: null }
+  expect(decidir(hecho)).toEqual({ accion: 'continuar', texto: TEXTO_REVISION, revision: true })
+  expect(decidir({ ...hecho, yaRevisado: true, veredicto: 'ok' })).toEqual({ accion: 'terminar', motivo: 'listo y revisado', revision: 'aprobada' })
   expect(decidir({ ...base, total: 2, hechos: 2, siguiente: null })).toEqual({ accion: 'terminar', motivo: 'listo' })
+})
+
+test('si el revisor encuentra problemas se corrige y se revisa de nuevo, hasta 2 rondas; luego termina con observaciones', () => {
+  const hecho = { ...base, hechos: 4, siguiente: null, yaRevisado: true, veredicto: 'problemas' as const }
+  expect(decidir(hecho)).toEqual({ accion: 'continuar', texto: expect.stringMatching(/ronda 1 de 2/), correccion: true })
+  expect(decidir({ ...hecho, rondas: 1 })).toEqual({ accion: 'continuar', texto: expect.stringMatching(/ronda 2 de 2/), correccion: true })
+  expect(decidir({ ...hecho, rondas: MAX_RONDAS })).toEqual({ accion: 'terminar', motivo: expect.stringMatching(/observaciones/), revision: 'con observaciones' })
+})
+
+test('si se pidió revisar y el revisor no opinó, se insiste una vez y luego termina avisando', () => {
+  const hecho = { ...base, hechos: 4, siguiente: null, yaRevisado: true }
+  expect(decidir(hecho)).toEqual({ accion: 'continuar', texto: TEXTO_REVISION, revision: true })
+  expect(decidir({ ...hecho, sinVeredicto: 1 })).toEqual({ accion: 'terminar', motivo: expect.stringMatching(/no llegó a opinar/), revision: 'con observaciones' })
+})
+
+test('un pedido de crear algo, aunque sea corto, cuenta como grande', () => {
+  expect(esTareaGrande('hazme una página para mi panadería')).toBe(true)
+  expect(esTareaGrande('crea una tienda en línea de ropa')).toBe(true)
+  expect(esTareaGrande('crea un archivo notas.txt')).toBe(false)
+  expect(esTareaGrande('explícame qué es una API')).toBe(false)
 })
 
 test('frena en el tope de pasos seguidos y si se atasca en el mismo paso', () => {
@@ -93,12 +114,22 @@ test('un pedido grande arranca la misión solo, y tras cada turno sigue con el s
   await clock.advance(0)
   expect(enviados.at(-1)).toMatch(/equipo:revisor/)
 
+  // El revisor encuentra un problema: se corrige y se revisa de nuevo.
+  await $.turn.complete({ agentId: 'r1', reason: 'answer', answer: '- src/a.ts: falta validar vacío', durationMs: 1, isAborted: false, turnId: 'tr' } as never)
+  await $.turn.complete(turno())
+  await clock.advance(0)
+  expect(enviados.at(-1)).toMatch(/revisor encontró problemas \(ronda 1 de 2\)/)
+  await $.turn.complete(turno())
+  await clock.advance(0)
+  expect(enviados.at(-1)).toMatch(/equipo:revisor/)
+  await $.turn.complete({ agentId: 'r2', reason: 'answer', answer: 'TODO BIEN', durationMs: 1, isAborted: false, turnId: 'tr2' } as never)
+
   const antes = enviados.length
   await $.turn.complete(turno())
   await clock.advance(0)
   expect(enviados.length).toBe(antes)
   const estado = await $.command.run({ command: 'piloto', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as never)
-  expect(estado.text).toMatch(/terminó: listo/)
+  expect(estado.text).toMatch(/terminó: listo y revisado/)
 })
 
 test('un pedido corto no arranca nada y /piloto parar frena una misión', async ($, on) => {

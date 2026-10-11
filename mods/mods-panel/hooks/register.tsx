@@ -838,9 +838,10 @@ export const register: Register = on => {
                     <Text color="warning">{bar(piloto.hechos, Math.max(1, piloto.total), 12)}</Text> <Text bold>{piloto.hechos} de {piloto.total}</Text> <Text dimColor>pasos · siguió solo {piloto.continuaciones}/{piloto.max}</Text>
                   </Text>
                   {piloto.siguiente !== null && <Text wrap="truncate-end" dimColor>Sigue: {piloto.siguiente}</Text>}
+                  {piloto.revision !== 'sin revisar' && <Text wrap="truncate-end" dimColor>Revisión: {piloto.revision}</Text>}
                 </Box>
               )}
-              {piloto !== null && !piloto.activa && piloto.fin !== '' && <Text wrap="truncate-end" dimColor>Última misión: {piloto.objetivo} · {piloto.fin}</Text>}
+              {piloto !== null && !piloto.activa && piloto.fin !== '' && <Text wrap="truncate-end" dimColor>Última misión: {piloto.objetivo} · {piloto.fin}{piloto.revision === 'aprobada' ? ' · aprobada por el revisor' : ''}</Text>}
               <Box flexDirection="row" columnGap={1} marginTop={1}>
                 {piloto !== null && piloto.activa && <Button key="pil-stop" label="Parar" onPress={() => $.command.run({ command: 'piloto', args: 'parar' })} />}
                 <Button key="pil-auto" label={pilotoOn ? 'Automático: sí' : 'Automático: no'} onPress={() => $.command.run({ command: 'piloto', args: `auto ${pilotoOn ? 'off' : 'on'}` })} />

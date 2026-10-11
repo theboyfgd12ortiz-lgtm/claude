@@ -7,6 +7,7 @@ import {
   ESCALERA,
   heuristica,
   leerPuntos,
+  NIVEL_PILOTO,
   peldano,
   puntosANivel,
   pideUnPlan,
@@ -199,4 +200,8 @@ test('con la caché caliente no se cambia de modelo ni de esfuerzo por un escal�
   expect(decidir({ actual: 4, pedido: 5, ...base, fria: true }).nivel).toBe(5)
   expect(decidir({ actual: 3, pedido: 6, ...base, fria: false }).nivel).toBe(6)
   expect(decidir({ actual: 4, pedido: 4, ...base, fria: false }).nota).toBe('')
+})
+
+test('el mínimo del director durante una misión del piloto es un escalón de Opus', () => {
+  expect(peldano(NIVEL_PILOTO).familia).toBe('opus')
 })

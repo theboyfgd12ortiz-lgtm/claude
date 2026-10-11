@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Mision, Paso } from '../types'
 import { decidir, esTareaGrande, MAX_CONTINUACIONES, protocolo, recortar, resumenPlan } from './reglas'
 
-const VACIA: Mision = { activa: false, objetivo: '', hechos: 0, total: 0, siguiente: null, continuaciones: 0, max: MAX_CONTINUACIONES, fin: '' }
+const VACIA: Mision = { activa: false, objetivo: '', hechos: 0, total: 0, siguiente: null, continuaciones: 0, max: MAX_CONTINUACIONES, fin: '', revision: 'sin revisar' }
 const mision = atom({ plugin: 'piloto', key: 'mision' } as const, VACIA)
 const isAuto = atom({ plugin: 'piloto', key: 'isAuto' } as const, true)
 const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
@@ -16,17 +16,32 @@ let plan: Paso[] = []
 let ultimoSiguiente: string | null = null
 let repeticiones = 0
 let yaRevisado = false
+let veredicto: 'ok' | 'problemas' | null = null
+let rondas = 0
+let sinVeredicto = 0
+
+/** Si la respuesta de ese agente es del revisor (según el mod equipo); sin equipo, cualquier agente cuenta. */
+const esRevisor = async ($: EngineInterface, id: string): Promise<boolean> => {
+  const r = await $.state.get({ plugin: 'equipo', key: 'agentes' } as never).catch(() => undefined)
+  const lista = (r as { value?: { id: string; tipo: string }[] } | undefined)?.value
+  if (!Array.isArray(lista) || lista.length === 0) return true
+
+  return lista.find(a => a.id === id)?.tipo === 'equipo:revisor'
+}
 
 const empezar = async ($: EngineInterface, objetivo: string) => {
   plan = []
   ultimoSiguiente = null
   repeticiones = 0
   yaRevisado = false
+  veredicto = null
+  rondas = 0
+  sinVeredicto = 0
   await update($, mision, () => ({ ...VACIA, activa: true, objetivo: recortar(objetivo, 160) }))
 }
 
-const terminar = async ($: EngineInterface, motivo: string, aviso: string) => {
-  await update($, mision, m => ({ ...m, activa: false, fin: motivo }))
+const terminar = async ($: EngineInterface, motivo: string, aviso: string, revision?: Mision['revision']) => {
+  await update($, mision, m => ({ ...m, activa: false, fin: motivo, revision: revision ?? m.revision }))
   $.ui.toast(aviso)
 }
 
@@ -71,21 +86,37 @@ export const register: Register = on => {
   // Al terminar el turno del director: si quedan pasos, sigue solo; si no, cierra la misión.
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (e.agentId !== undefined) return done
+    if (e.agentId !== undefined) {
+      // La respuesta del revisor, tras pedir la revisión, es el veredicto.
+      if (yaRevisado && typeof e.answer === 'string' && e.answer.trim() !== '' && (await read($, mision)).activa && (await esRevisor($, e.agentId))) {
+        veredicto = /TODO BIEN/.test(e.answer) ? 'ok' : 'problemas'
+      }
+
+      return done
+    }
     const m = await read($, mision)
     if (!m.activa) return done
     const r = resumenPlan(plan)
     repeticiones = r.siguiente !== null && r.siguiente === ultimoSiguiente ? repeticiones + 1 : 0
     ultimoSiguiente = r.siguiente
     const presupuesto = (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.nivel ?? 'normal'
-    const d = decidir({ activa: true, razon: e.reason, continuaciones: m.continuaciones, max: m.max, total: r.total, hechos: r.hechos, siguiente: r.siguiente, presupuesto, repeticiones, yaRevisado })
+    const d = decidir({ activa: true, razon: e.reason, continuaciones: m.continuaciones, max: m.max, total: r.total, hechos: r.hechos, siguiente: r.siguiente, presupuesto, repeticiones, yaRevisado, veredicto, rondas, sinVeredicto })
 
     if (d.accion === 'continuar') {
-      if (d.revision === true) yaRevisado = true
-      await update($, mision, x => ({ ...x, continuaciones: x.continuaciones + 1 }))
+      if (d.revision === true) {
+        if (yaRevisado && veredicto === null) sinVeredicto += 1
+        yaRevisado = true
+        veredicto = null
+      }
+      if (d.correccion === true) {
+        rondas += 1
+        yaRevisado = false
+        veredicto = null
+      }
+      await update($, mision, x => ({ ...x, continuaciones: x.continuaciones + 1, revision: d.revision === true ? 'revisando' : d.correccion === true ? 'corrigiendo' : x.revision }))
       void $.prompt.submit({ text: d.texto, wait: false } as never).catch(() => undefined)
     } else if (d.accion === 'terminar') {
-      await terminar($, d.motivo, 'Piloto: terminé. Revisa el resumen.')
+      await terminar($, d.motivo, d.revision === 'aprobada' ? 'Piloto: terminé y el revisor lo aprobó.' : 'Piloto: terminé. Revisa el resumen.', d.revision)
     } else if (d.accion === 'parar') {
       await terminar($, d.motivo, `Piloto: paré (${d.motivo}).`)
     }

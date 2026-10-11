@@ -100,6 +100,16 @@ async function techoAhora($: EngineInterface): Promise<number> {
   return techoEfectivo(await read($, tope), presupuesto?.value?.topeMax)
 }
 
+/** El escalón mínimo del director mientras el piloto lleva una misión: planear, integrar y revisar con calidad; los agentes baratos hacen lo pesado. */
+export const NIVEL_PILOTO = 6
+
+/** Si el piloto tiene una misión en marcha (lee su estado; sin el mod, nunca). */
+async function misionActiva($: EngineInterface): Promise<boolean> {
+  const r = await $.state.get({ plugin: 'piloto', key: 'mision' } as never).catch(() => undefined)
+
+  return (r as { value?: { activa?: boolean } } | undefined)?.value?.activa === true
+}
+
 /** Lo que Claude lee junto a una tarea grande: empezar con un plan visible, no con el código. */
 export const AVISO_PLAN = `Esta es una tarea grande. Empieza con un plan corto de 3 a 7 pasos usando la herramienta de lista de tareas (TodoWrite), con el paso actual marcado en curso, y ve marcándolos como hechos al terminarlos. Así el usuario ve el avance. No escribas el plan como texto aparte. Si algo del pedido es ambiguo y cambia mucho el resultado, pregunta antes de empezar.`
 
@@ -447,7 +457,8 @@ export const register: Register = on => {
     await mostrar($)
 
     // Tarea grande: Claude empieza con un plan visible en el Centro de control (la persona no lo pide).
-    return pideUnPlan(puntos) ? next({ ...e, context: [...(e.context ?? []), AVISO_PLAN] }) : next(e)
+    // Con el piloto en marcha el plan ya lo pide él: no se repite (y no se contradice con "pregunta antes de empezar").
+    return pideUnPlan(puntos) && !(await misionActiva($)) ? next({ ...e, context: [...(e.context ?? []), AVISO_PLAN] }) : next(e)
   }).catch(($, e, next) => next(e))
 
   on('tool.call', async ($, e, next) => {
@@ -473,7 +484,9 @@ export const register: Register = on => {
     const techo = await techoAhora($)
     const lista = await read($, historial)
     const inicial = lista[lista.length - 1]?.nivel ?? actual
-    const n = m === 'auto' ? Math.max(actual, escalar(inicial, e.index, errores, techo)) : actual
+    const escalado = m === 'auto' ? Math.max(actual, escalar(inicial, e.index, errores, techo)) : actual
+    // Misión del piloto: el director trabaja con el modelo fuerte (sin pasar del tope del presupuesto).
+    const n = m === 'auto' && (await misionActiva($)) ? Math.max(escalado, Math.min(NIVEL_PILOTO, techo)) : escalado
     if (n !== actual) {
       await update($, nivel, () => n)
       await mostrar($)

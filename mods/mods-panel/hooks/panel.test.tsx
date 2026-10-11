@@ -364,7 +364,7 @@ const pilotoSimulado = {
   name: 'piloto',
   register: (on: On) => {
     on('session.start', async ($, e, next) => {
-      await $.state.set({ plugin: 'piloto', key: 'mision' } as const, { activa: true, objetivo: 'una tienda', hechos: 2, total: 5, siguiente: 'probar en móvil', continuaciones: 2, max: 8, fin: '' })
+      await $.state.set({ plugin: 'piloto', key: 'mision' } as const, { activa: true, objetivo: 'una tienda', hechos: 2, total: 5, siguiente: 'probar en móvil', continuaciones: 2, max: 8, fin: '', revision: 'sin revisar' })
 
       return next(e)
     })

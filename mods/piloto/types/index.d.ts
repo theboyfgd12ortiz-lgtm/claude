@@ -12,6 +12,8 @@ export type Mision = {
   max: number
   /** Por qué terminó o paró la última misión (vacío mientras corre). */
   fin: string
+  /** La revisión final: sin empezar, en marcha, aprobada o con observaciones que quedaron. */
+  revision: 'sin revisar' | 'revisando' | 'corrigiendo' | 'aprobada' | 'con observaciones'
 }
 
 declare module 'claude-code' {

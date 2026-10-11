@@ -6,6 +6,8 @@ import type { Paso } from '../types'
 export const MAX_CONTINUACIONES = 8
 
 const ENVOLTURAS = /<(system-reminder|local-command-caveat|local-command-stdout|local-command-stderr|command-name|command-message|command-args)>[\s\S]*?<\/\1>/g
+/** Pedidos de crear algo que casi siempre son trabajo grande aunque se escriban en una línea. */
+const CREAR = /\b(haz(me)?|crea(me|r)?|constru\w+|desarroll\w+|mont\w+|genera(me|r)?|dise[ñn]a(me|r)?)\b[^.\n]{0,40}\b(p[aá]gina|sitio|web|landing|tienda|app|aplicaci[oó]n|sistema|dashboard|panel|bot|api|plataforma|portafolio|blog|cat[aá]logo|juego)\b/i
 const PALABRAS_GRANDES = /\b(refactor\w*|migra\w*|reescrib\w*|rediseñ\w*|arquitectura|sistema completo|app completa|aplicaci[oó]n completa|todo el proyecto|de punta a punta|end[- ]to[- ]end|varios (archivos|m[oó]dulos|pasos)|desde cero|implementa\w* (un|una|el|la) \w+ (completo|completa)|p[aá]gina (web )?completa|sitio (web )?completo)\b/i
 
 /** Si el pedido parece un trabajo grande: largo, con varias partes, o que lo dice con sus palabras. */
@@ -14,7 +16,7 @@ export const esTareaGrande = (texto: string): boolean => {
   if (t.startsWith('/')) return false
   const partes = t.split('\n').filter(l => /^\s*(?:[-*•]|\d+[.)])\s+\S/.test(l)).length
 
-  return t.length >= 600 || partes >= 3 || PALABRAS_GRANDES.test(t)
+  return t.length >= 600 || partes >= 3 || PALABRAS_GRANDES.test(t) || CREAR.test(t)
 }
 
 export const recortar = (texto: string, n: number): string => {
@@ -34,7 +36,10 @@ export const textoContinuar = (hechos: number, total: number, siguiente: string)
   `Piloto: sigue con el paso ${hechos + 1} de ${total}: ${recortar(siguiente, 160)}. Reparte con el equipo lo que sea pesado y marca el paso al terminar.`
 
 export const TEXTO_PLAN = 'Piloto: antes de seguir, haz el plan con TodoWrite (3 a 8 pasos con su criterio de "terminado") y empieza por el primero.'
-export const TEXTO_REVISION = 'Piloto: todos los pasos están hechos. Pasa equipo:revisor sobre lo cambiado, corrige lo que encuentre y dame el resumen de 5 líneas (qué hiciste, cómo lo comprobaste, qué falta).'
+export const MAX_RONDAS = 2
+export const TEXTO_CORREGIR = (ronda: number): string =>
+  `Piloto: el revisor encontró problemas (ronda ${ronda} de ${MAX_RONDAS}). Corrígelos uno por uno, comprueba que cada arreglo funciona y vuelve a pasar equipo:revisor.`
+export const TEXTO_REVISION = 'Piloto: todos los pasos están hechos. Antes de darlo por terminado comprueba que funciona de verdad (corre las pruebas o la compilación, o abre y mira el resultado) y pasa equipo:revisor sobre todo lo cambiado. Su respuesta tiene que ser TODO BIEN; si no, corrige.'
 
 export const resumenPlan = (pasos: readonly Paso[]): { hechos: number; total: number; siguiente: string | null } => ({
   hechos: pasos.filter(p => p.hecho).length,
@@ -56,9 +61,17 @@ export type Entrada = {
   /** Cuántas veces seguidas el siguiente paso fue el mismo (señal de atasco). */
   repeticiones: number
   yaRevisado: boolean
+  /** Lo que dijo el revisor tras la última revisión: TODO BIEN o una lista de problemas; null si aún no hubo. */
+  veredicto: 'ok' | 'problemas' | null
+  /** Cuántas rondas de corrección van y cuántas veces se pidió la revisión sin que llegara veredicto. */
+  rondas: number
+  sinVeredicto: number
 }
 
-export type Decision = { accion: 'nada' } | { accion: 'continuar'; texto: string; revision?: true } | { accion: 'terminar' | 'parar'; motivo: string }
+export type Decision =
+  | { accion: 'nada' }
+  | { accion: 'continuar'; texto: string; revision?: true; correccion?: true }
+  | { accion: 'terminar' | 'parar'; motivo: string; revision?: 'aprobada' | 'con observaciones' }
 
 /** Qué hace el piloto cuando el director termina un turno. */
 export const decidir = (a: Entrada): Decision => {
@@ -70,7 +83,17 @@ export const decidir = (a: Entrada): Decision => {
     return a.continuaciones === 0 ? { accion: 'continuar', texto: TEXTO_PLAN } : { accion: 'terminar', motivo: 'listo' }
   }
   if (a.hechos >= a.total || a.siguiente === null) {
-    return a.yaRevisado || a.total < 3 ? { accion: 'terminar', motivo: 'listo' } : { accion: 'continuar', texto: TEXTO_REVISION, revision: true }
+    if (a.total < 3) return { accion: 'terminar', motivo: 'listo' }
+    if (!a.yaRevisado) return { accion: 'continuar', texto: TEXTO_REVISION, revision: true }
+    if (a.veredicto === 'ok') return { accion: 'terminar', motivo: 'listo y revisado', revision: 'aprobada' }
+    if (a.veredicto === 'problemas') {
+      return a.rondas < MAX_RONDAS
+        ? { accion: 'continuar', texto: TEXTO_CORREGIR(a.rondas + 1), correccion: true }
+        : { accion: 'terminar', motivo: 'quedan observaciones del revisor: están en el resumen', revision: 'con observaciones' }
+    }
+
+    // Se pidió revisar y no llegó veredicto: se insiste una vez.
+    return a.sinVeredicto < 1 ? { accion: 'continuar', texto: TEXTO_REVISION, revision: true } : { accion: 'terminar', motivo: 'listo, pero el revisor no llegó a opinar', revision: 'con observaciones' }
   }
   if (a.continuaciones >= a.max) return { accion: 'parar', motivo: `llegué al tope de ${a.max} pasos seguidos; dime si sigo` }
   if (a.repeticiones >= 2) return { accion: 'parar', motivo: 'parece atascado en el mismo paso; mira qué lo detiene' }
