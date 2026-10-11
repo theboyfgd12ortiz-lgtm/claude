@@ -48,18 +48,10 @@ export type Ruta = {
   neto: number
 }
 
-/** El obrero gratis (OmniRoute): si se puede usar y cuánto se ha usado. */
-export type Gratis = {
-  estado: 'sin clave' | 'sin probar' | 'conectado' | 'sin conexión'
-  llamadas: number
-  fallos: number
-  ultimo: string | null
-}
-
 export type Aprendizaje = Record<string, Ruta>
 
 declare module 'claude-code' {
   interface PluginState {
-    equipo: { agentes: Registro[]; investigacion: Investigacion | null; isAuto: boolean; aprendizaje: Aprendizaje; gratis: Gratis }
+    equipo: { agentes: Registro[]; investigacion: Investigacion | null; isAuto: boolean; aprendizaje: Aprendizaje }
   }
 }

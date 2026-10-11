@@ -1,9 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Aprendizaje, Gratis, Investigacion, Registro } from '../types'
+import type { Aprendizaje, Investigacion, Registro } from '../types'
 import { AVISO_COMPACTAR, entradaPizarra, esTareaGrande, pistaDeEquipo, PIZARRA, sumarEntrada } from './contexto'
-import { construirPeticion, leerRespuesta, modeloPara, traeSecreto, URL_POR_DEFECTO } from './gratis'
 import { aprender, esBueno, lecciones } from './aprende'
 import { AGENTES, ahorro, costo, dificultadDe, familiaDe, familiaDeNivel, rango, GUIA, modeloParaAgente, slug } from './reglas'
 
@@ -11,7 +10,6 @@ const agentes = atom({ plugin: 'equipo', key: 'agentes' } as const, [])
 const investigacion = atom({ plugin: 'equipo', key: 'investigacion' } as const, null)
 const isAuto = atom({ plugin: 'equipo', key: 'isAuto' } as const, true)
 const aprendizaje = atom({ plugin: 'equipo', key: 'aprendizaje' } as const, {})
-const gratis = atom({ plugin: 'equipo', key: 'gratis' } as const, { estado: 'sin probar', llamadas: 0, fallos: 0, ultimo: null })
 const selectorNivel = { plugin: 'selector-modelo', key: 'nivel' } as const
 const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
 
@@ -54,30 +52,6 @@ const lanzar = async ($: EngineInterface, args: Parameters<EngineInterface['agen
   return r
 }
 
-type ResultadoGratis = { ok: true; texto: string } | { ok: false; motivo: string }
-
-/** Manda una tarea de solo texto a OmniRoute (modelos gratuitos) y anota cómo salió. */
-const llamarGratis = async ($: EngineInterface, a: { tarea: string; contexto?: string | undefined; tipo?: string | undefined }): Promise<ResultadoGratis> => {
-  if (traeSecreto(`${a.tarea}\n${a.contexto ?? ''}`)) return { ok: false, motivo: 'No lo envío: parece traer una clave o contraseña, y esto sale a proveedores gratuitos de terceros.' }
-  const clave = await $.env.get('OMNIROUTE_API_KEY')
-  const base = (await $.env.get('OMNIROUTE_URL')) ?? URL_POR_DEFECTO
-  const modelo = modeloPara(a.tipo, await $.env.get('OMNIROUTE_MODEL'))
-  const { url, init } = construirPeticion(base, clave, modelo, a.tarea, a.contexto)
-  const anotar = (ok: boolean, estado: 'conectado' | 'sin conexión', ultimo: string) =>
-    update($, gratis, (g): Gratis => ({ ...g, estado, llamadas: g.llamadas + 1, fallos: g.fallos + (ok ? 0 : 1), ultimo }))
-  try {
-    const r = await $.http.fetch(url, init)
-    const res = leerRespuesta(r.status, r.text)
-    await anotar(res.ok, 'conectado', res.ok ? modelo : res.motivo)
-
-    return res
-  } catch {
-    await anotar(false, 'sin conexión', 'sin conexión')
-
-    return { ok: false, motivo: `No pude conectar con OmniRoute en ${base}. ¿Está encendido? (omniroute)` }
-  }
-}
-
 /** Cambia lo aprendido y lo guarda para la próxima sesión. */
 const recordar = async ($: EngineInterface, cambio: (a: Aprendizaje) => Aprendizaje) => {
   const nuevo = await update($, aprendizaje, cambio)
@@ -114,39 +88,11 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     guiaFija = undefined
     pizarraNueva = true
-    // El obrero gratis solo existe si la persona puso su clave de OmniRoute: así nadie paga por una herramienta que no usa.
-    const claveOmni = await $.env.get('OMNIROUTE_API_KEY')
-    if (claveOmni !== undefined && claveOmni !== '') {
-      await $.tool
-        .register({
-          name: 'gratis',
-          description:
-            'Ayudante gratuito de SOLO TEXTO (modelos de OmniRoute): sin archivos, sin internet, sin herramientas. Úsalo para redactar, resumir, traducir, explicar o responder de memoria cuando el presupuesto esté apretado. Pásale en `contexto` todo lo que necesite; no envíes claves ni datos privados.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              tarea: { type: 'string', description: 'Lo que debe hacer, claro y completo.' },
-              contexto: { type: 'string', description: 'Texto sobre el que trabaja (opcional).' },
-              tipo: { type: 'string', enum: ['rapido', 'codigo', 'barato'], description: 'rapido, codigo o barato (opcional).' },
-            },
-            required: ['tarea'],
-          },
-        })
-        .catch(() => undefined)
-      await update($, gratis, (g): Gratis => ({ ...g, estado: g.estado === 'sin clave' ? 'sin probar' : g.estado }))
-    } else {
-      await update($, gratis, (g): Gratis => ({ ...g, estado: 'sin clave' }))
-    }
     for (const spec of AGENTES) await $.agent.register(spec).catch(() => undefined)
     await $.command.register({
       name: 'equipo',
       description: 'Equipo de agentes con modelos baratos: /equipo · on|off · olvidar · probar',
       argumentHint: 'on|off|olvidar|probar',
-    })
-    await $.command.register({
-      name: 'gratis',
-      description: 'Pregunta a un modelo gratuito de OmniRoute (solo texto): /gratis <tarea> · estado',
-      argumentHint: '<tarea> | estado',
     })
     await $.command.register({
       name: 'investigar',
@@ -166,7 +112,7 @@ export const register: Register = on => {
     if ((origen !== undefined && !PERSONA.has(origen)) || !(await read($, isAuto))) return next(e)
     const apretado = typeof (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax === 'number'
     const usage = await $.session.usage().catch(() => null)
-    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, tokens: usage?.context.tokens ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0, apretado, gratis: apretado && ['sin probar', 'conectado'].includes((await read($, gratis)).estado) })
+    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, tokens: usage?.context.tokens ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0, apretado })
 
     return next(pista === undefined ? e : { ...e, context: [...(e.context ?? []), pista] })
   }).catch(($, e, next) => next(e))
@@ -382,35 +328,5 @@ export const register: Register = on => {
     }
 
     return { text: 'Investigando con un agente barato (Haiku). Te aviso cuando termine; léelo con /investigar ver.' }
-  })
-
-  // La herramienta que ve Claude: texto a OmniRoute y de vuelta.
-  on('tool.call', { tool: 'mcp__equipo__gratis' }, async ($, e) => {
-    const a = e as unknown as { tarea?: unknown; contexto?: unknown; tipo?: unknown }
-    if (typeof a.tarea !== 'string' || a.tarea.trim() === '') return { deny: 'Falta `tarea`: dime qué debe hacer.' }
-    const r = await llamarGratis($, { tarea: a.tarea, contexto: typeof a.contexto === 'string' ? a.contexto : undefined, tipo: typeof a.tipo === 'string' ? a.tipo : undefined })
-
-    return r.ok ? { result: r.texto } : { deny: r.motivo }
-  }).catch(($, e, next) => next(e))
-
-  on('command.run', { command: 'gratis' }, async ($, e) => {
-    const arg = e.args.trim()
-    const clave = await $.env.get('OMNIROUTE_API_KEY')
-    if (arg === '' || arg.toLowerCase() === 'estado') {
-      const base = (await $.env.get('OMNIROUTE_URL')) ?? URL_POR_DEFECTO
-      try {
-        const r = await $.http.fetch(`${base.replace(/\/+$/, '')}/models`, { headers: clave ? { authorization: `Bearer ${clave}` } : {} })
-        await update($, gratis, (g): Gratis => ({ ...g, estado: r.ok ? 'conectado' : 'sin conexión' }))
-
-        return { text: r.ok ? `OmniRoute responde en ${base}. ${clave ? 'La clave está puesta.' : 'Ojo: falta OMNIROUTE_API_KEY.'}` : `OmniRoute contestó ${r.status} en ${base}. Revisa la clave (OMNIROUTE_API_KEY).` }
-      } catch {
-        await update($, gratis, (g): Gratis => ({ ...g, estado: 'sin conexión' }))
-
-        return { text: `No encuentro OmniRoute en ${base}. Enciéndelo (comando omniroute) y vuelve a probar.` }
-      }
-    }
-    const r = await llamarGratis($, { tarea: arg })
-
-    return { text: r.ok ? r.texto : r.motivo }
   })
 }

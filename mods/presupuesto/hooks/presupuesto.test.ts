@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { nivelDe } from './reglas'
+import { duracion, estaAgotado, faltaPara, nivelDe } from './reglas'
 
 /** A stand-in for another mod: it reads the ceiling the way selector-modelo does and reports it. */
 const lector = {
@@ -37,7 +37,7 @@ test('publica el tope máximo según el límite y lo quita al renovarse', { plug
   await clock.advance(0)
   const alto = await $.command.run({ command: 'presupuesto', args: '', ...CMD } as never)
   expect(alto.text).toMatch(/ahorro máximo · semana 98%/)
-  expect((await $.command.run({ command: 'tope', args: '', ...CMD } as never)).text).toBe('4')
+  expect((await $.command.run({ command: 'tope', args: '', ...CMD } as never)).text).toBe('2')
 
   semana = 3
   const bajo = await $.command.run({ command: 'presupuesto', args: '', ...CMD } as never)
@@ -75,4 +75,40 @@ test('con el presupuesto en modo ahorro se rechaza abrir una skill; en normal pa
   await $.turn.complete(turno)
   await clock.advance(0)
   expect((await $.tool.call({ tool: 'Skill', skill: 'brainstorming' } as never)).deny).toBeUndefined()
+})
+
+test('calcula cuánto falta para que se renueve el límite y cuándo está agotado', () => {
+  expect(faltaPara('2026-10-11T12:00:00Z', Date.parse('2026-10-11T10:40:00Z'))).toBe(80 * 60_000)
+  expect(faltaPara('2026-10-11T09:00:00Z', Date.parse('2026-10-11T10:40:00Z'))).toBeNull()
+  expect(faltaPara(undefined, 0)).toBeNull()
+  expect(duracion(80 * 60_000)).toBe('1 h 20 min')
+  expect(duracion(35 * 60_000)).toBe('35 min')
+  expect(estaAgotado(100, 10)).toBe(true)
+  expect(estaAgotado(40, 100)).toBe(true)
+  expect(estaAgotado(99, 99)).toBe(false)
+})
+
+test('al agotarse el límite avisa cuándo vuelve y, pasado ese tiempo, avisa que ya se puede seguir', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.store(on)
+  const ahora = (clock as unknown as { now: () => number }).now()
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 100, resetsAt: new Date(ahora + 60 * 60_000).toISOString() }] } }) as never)
+  const toasts: string[] = []
+  on('ui.toast', (_$, e) => {
+    toasts.push((e as { text: string }).text)
+
+    return { value: undefined } as never
+  })
+  const avisos: string[] = []
+  on('ui.notify', (_$, e) => {
+    avisos.push((e as { text: string }).text)
+
+    return { value: { isSent: true, channel: 'x' } } as never
+  })
+  on('turn.complete', () => ({ text: 'ok' }))
+  await $.turn.complete({ reason: 'answer', answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't' } as never)
+  await clock.advance(0)
+  expect(toasts.join(' ')).toMatch(/se acabó el límite\. Vuelve en 1 h/)
+  await clock.advance(61 * 60_000)
+  expect(avisos.join(' ')).toMatch(/ya puedes seguir/)
 })

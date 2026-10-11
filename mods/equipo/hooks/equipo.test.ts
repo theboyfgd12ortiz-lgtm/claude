@@ -331,33 +331,3 @@ test('una interrupción no cuenta como fallo del agente: no sube de nivel', asyn
   }
   expect(modelos).toEqual(['haiku', 'haiku', 'haiku'])
 })
-
-test('con la clave de OmniRoute puesta Claude tiene la herramienta gratis y su texto vuelve', async ($, on) => {
-  on('clock.now', () => ({ value: 1000 }) as never)
-  on('command.register', () => ({ value: { command: 'x' } }) as never)
-  on('agent.register', () => ({ value: { agent: 'x' } }) as never)
-  let registrada = ''
-  on('tool.register', (_$, e) => {
-    registrada = (e as { name: string }).name
-
-    return { value: { tool: 'mcp__equipo__gratis' } } as never
-  })
-  on('env.get', (_$, e) => ({ value: (e as { name: string }).name === 'OMNIROUTE_API_KEY' ? 'k123' : undefined }) as never)
-  let pedido = ''
-  on('http.fetch', (_$, e) => {
-    pedido = JSON.stringify(e)
-
-    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ choices: [{ message: { content: 'Resumen listo' } }] }) } } as never
-  })
-  on('session.start', () => ({ cwd: '/r' }) as never)
-  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
-  expect(registrada).toBe('gratis')
-
-  const r = await $.tool.call({ tool: 'mcp__equipo__gratis', tarea: 'resume esto', contexto: 'hola mundo' } as never)
-  expect((r as { text?: string }).text ?? String((r as { result?: unknown }).result)).toMatch(/Resumen listo/)
-  expect(pedido).toMatch(/localhost:20128\/v1\/chat\/completions/)
-  expect(pedido).toMatch(/Bearer k123/)
-
-  const bloqueado = await $.tool.call({ tool: 'mcp__equipo__gratis', tarea: 'usa password = hunter2hunter2' } as never)
-  expect(bloqueado.deny).toMatch(/clave o contraseña/)
-})

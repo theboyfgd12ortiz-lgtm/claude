@@ -72,7 +72,6 @@ const memoriaCuando = { plugin: 'memoria', key: 'at' } as const
 const memoriaAuto = { plugin: 'memoria', key: 'isAuto' } as const
 const equipoAgentes = { plugin: 'equipo', key: 'agentes' } as const
 const equipoInvest = { plugin: 'equipo', key: 'investigacion' } as const
-const equipoGratis = { plugin: 'equipo', key: 'gratis' } as const
 const equipoAuto = { plugin: 'equipo', key: 'isAuto' } as const
 const equipoAprende = { plugin: 'equipo', key: 'aprendizaje' } as const
 const webInforme = { plugin: 'web', key: 'informe' } as const
@@ -813,7 +812,6 @@ export const register: Register = on => {
       const autoEq = (await $.state.get(equipoAuto)).value ?? true
       const aprendido = Object.entries((await $.state.get(equipoAprende)).value ?? {})
       const costos = equipoCostos(lista)
-      const omni = (await $.state.get(equipoGratis)).value ?? null
       const COLOR_FAM = { haiku: 'success', sonnet: 'warning', opus: 'error', otro: 'inactive' } as const
       body = !hayEquipo ? (
         <Section title="EQUIPO">
@@ -865,24 +863,6 @@ export const register: Register = on => {
                 </Text>
               </Text>
             ))}
-          </Section>
-
-          <Section title="MODELOS GRATIS (OMNIROUTE)">
-            {omni === null || omni.estado === 'sin clave' ? (
-              <Text wrap="wrap" dimColor>
-                Apagado. Si usas OmniRoute, pon tu clave en la variable OMNIROUTE_API_KEY y reinicia Claude Code: Claude tendrá un ayudante gratuito de solo texto para cuando quede poco límite.
-              </Text>
-            ) : (
-              <Box flexDirection="column">
-                <Text wrap="truncate-end">
-                  <Text color={omni.estado === 'conectado' ? 'success' : omni.estado === 'sin conexión' ? 'error' : 'warning'}>●</Text> <Text bold>{omni.estado}</Text>{' '}
-                  <Text dimColor>{omni.llamadas} usos · {omni.fallos} fallos{omni.ultimo !== null ? ` · último: ${omni.ultimo}` : ''}</Text>
-                </Text>
-                <Box flexDirection="row" columnGap={1} marginTop={1}>
-                  <Button key="eq-omni" label="Probar conexión" onPress={() => $.command.run({ command: 'gratis', args: 'estado' })} />
-                </Box>
-              </Box>
-            )}
           </Section>
 
           <Section title="INVESTIGAR EN INTERNET">

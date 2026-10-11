@@ -2,12 +2,15 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Estado } from '../types'
-import { ETIQUETA, INSTRUCCIONES, nivelDe, SIN_SKILLS, TOPE } from './reglas'
+import { duracion, estaAgotado, ETIQUETA, faltaPara, INSTRUCCIONES, nivelDe, SIN_SKILLS, TOPE } from './reglas'
 
 const DE_LA_PERSONA = new Set(['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified'])
 const INICIAL: Estado = { nivel: 'normal', semana: null, cincoHoras: null, renuevaSemana: null, topeMax: null }
 const estado = atom({ plugin: 'presupuesto', key: 'estado' } as const, INICIAL)
 const isAuto = atom({ plugin: 'presupuesto', key: 'isAuto' } as const, true)
+
+// El aviso de "ya puedes seguir" (uno solo a la vez).
+let avisoRenovacion: { cancel: () => void } | undefined
 
 /** Lee los límites del plan y publica el nivel y el tope máximo; el selector de modelo lo lee solo. */
 const revisar = async ($: EngineInterface) => {
@@ -25,6 +28,24 @@ const revisar = async ($: EngineInterface) => {
         ? 'Presupuesto: tu límite se renovó, vuelvo al modo normal.'
         : `Presupuesto: ${ETIQUETA[nivel]} (semana ${Math.round(semana?.percentUsed ?? 0)}%). Modelo limitado al nivel ${TOPE[nivel]}.`,
     )
+  }
+
+  // Límite agotado: se dice cuándo vuelve y se avisa solo cuando ya se puede seguir (el trabajo queda guardado por el mod traspaso).
+  const agotado = activo && estaAgotado(cinco?.percentUsed ?? null, semana?.percentUsed ?? null)
+  if (agotado && avisoRenovacion === undefined) {
+    const cuando = (cinco?.percentUsed ?? 0) >= 100 ? cinco?.resetsAt : semana?.resetsAt
+    const falta = faltaPara(cuando, await $.clock.now())
+    if (falta !== null) {
+      $.ui.toast(`Presupuesto: se acabó el límite. Vuelve en ${duracion(falta)}; tu trabajo queda guardado y te aviso cuando puedas seguir.`)
+      avisoRenovacion = $.clock.after(falta + 30_000, () => {
+        avisoRenovacion = undefined
+        void $.ui.notify('Tu límite de uso se renovó: ya puedes seguir. Escribe /retomar para continuar donde quedaste.', { title: 'Claude Code' }).catch(() => undefined)
+        void revisar($)
+      })
+    }
+  } else if (!agotado && avisoRenovacion !== undefined) {
+    avisoRenovacion.cancel()
+    avisoRenovacion = undefined
   }
 
   await update($, estado, () => ({
