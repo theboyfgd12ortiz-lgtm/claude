@@ -79,6 +79,11 @@
       "name": "terminales",
       "source": "./mods/terminales",
       "description": "Varias terminales de Claude Code en el mismo proyecto: se ven, se mandan mensajes, no se pisan los archivos y puedes abrir una copia en paralelo."
+    },
+    {
+      "name": "piloto",
+      "source": "./mods/piloto",
+      "description": "Le dices qué quieres lograr y se planea, reparte con el equipo, ejecuta y revisa solo, con tope de pasos y freno de presupuesto."
     }
   ]
 }

@@ -17,7 +17,8 @@
     "web",
     "memoria",
     "equipo",
-    "terminales"
+    "terminales",
+    "piloto"
   ],
   "types": "./types/index.d.ts"
 }

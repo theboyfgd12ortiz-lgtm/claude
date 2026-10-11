@@ -50,7 +50,8 @@
     "respaldo@claude-mods": true,
     "web@claude-mods": true,
     "memoria@claude-mods": true,
-    "terminales@claude-mods": true
+    "terminales@claude-mods": true,
+    "piloto@claude-mods": true
   },
   "env": {
     "TOKEN_OPTIMIZER_BASH_COMPRESS": "0",

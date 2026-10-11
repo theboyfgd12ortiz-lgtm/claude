@@ -73,6 +73,8 @@ const memoriaAuto = { plugin: 'memoria', key: 'isAuto' } as const
 const equipoAgentes = { plugin: 'equipo', key: 'agentes' } as const
 const equipoInvest = { plugin: 'equipo', key: 'investigacion' } as const
 const terminalesEstado = { plugin: 'terminales', key: 'estado' } as const
+const pilotoMision = { plugin: 'piloto', key: 'mision' } as const
+const pilotoAuto = { plugin: 'piloto', key: 'isAuto' } as const
 const equipoAuto = { plugin: 'equipo', key: 'isAuto' } as const
 const equipoAprende = { plugin: 'equipo', key: 'aprendizaje' } as const
 const webInforme = { plugin: 'web', key: 'informe' } as const
@@ -814,6 +816,9 @@ export const register: Register = on => {
       const autoEq = (await $.state.get(equipoAuto)).value ?? true
       const aprendido = Object.entries((await $.state.get(equipoAprende)).value ?? {})
       const costos = equipoCostos(lista)
+      const piloto = (await $.state.get(pilotoMision)).value ?? null
+      const pilotoOn = (await $.state.get(pilotoAuto)).value ?? true
+      const hayPiloto = x.plugins.includes('piloto') || piloto !== null
       const COLOR_FAM = { haiku: 'success', sonnet: 'warning', opus: 'error', otro: 'inactive' } as const
       body = !hayEquipo ? (
         <Section title="EQUIPO">
@@ -821,6 +826,28 @@ export const register: Register = on => {
         </Section>
       ) : (
         <Box flexDirection="column">
+          {hayPiloto && (
+            <Section title="PILOTO: DIME QUÉ QUIERES LOGRAR">
+              <Text wrap="wrap" dimColor>Escribe un objetivo y Claude lo planea, lo reparte con el equipo barato, lo ejecuta paso a paso y lo revisa, sin que lo empujes. También arranca solo con tus pedidos grandes.</Text>
+              {Input !== undefined && (
+                <Input key="pil-ask" label="Objetivo " placeholder="una página para mi panadería con menú y WhatsApp" value="" submitLabel="empezar" onSubmit={(v: string) => $.command.run({ command: 'piloto', args: v })} />
+              )}
+              {piloto !== null && piloto.activa && (
+                <Box flexDirection="column" marginTop={1}>
+                  <Text wrap="truncate-end">
+                    <Text color="warning">{bar(piloto.hechos, Math.max(1, piloto.total), 12)}</Text> <Text bold>{piloto.hechos} de {piloto.total}</Text> <Text dimColor>pasos · siguió solo {piloto.continuaciones}/{piloto.max}</Text>
+                  </Text>
+                  {piloto.siguiente !== null && <Text wrap="truncate-end" dimColor>Sigue: {piloto.siguiente}</Text>}
+                </Box>
+              )}
+              {piloto !== null && !piloto.activa && piloto.fin !== '' && <Text wrap="truncate-end" dimColor>Última misión: {piloto.objetivo} · {piloto.fin}</Text>}
+              <Box flexDirection="row" columnGap={1} marginTop={1}>
+                {piloto !== null && piloto.activa && <Button key="pil-stop" label="Parar" onPress={() => $.command.run({ command: 'piloto', args: 'parar' })} />}
+                <Button key="pil-auto" label={pilotoOn ? 'Automático: sí' : 'Automático: no'} onPress={() => $.command.run({ command: 'piloto', args: `auto ${pilotoOn ? 'off' : 'on'}` })} />
+              </Box>
+            </Section>
+          )}
+
           <Section title="CÓMO TRABAJA">
             <Text wrap="wrap" dimColor>Claude dirige y reparte lo pesado (buscar, leer, investigar, revisar) a modelos más baratos. Aprende: si uno barato falla seguido, sube a Sonnet; si luego acierta mucho, vuelve a probar el barato.</Text>
             <Box flexDirection="row" columnGap={1} marginTop={1}>
@@ -1090,6 +1117,14 @@ export const register: Register = on => {
           what: 'Varias terminales de Claude Code en el mismo proyecto: se ven, se mandan mensajes y no se pisan los archivos.',
           stat: !x.plugins.includes('terminales') ? 'no instalado' : `${((await $.state.get(terminalesEstado)).value?.otras ?? []).length} otras abiertas`,
           action: x.plugins.includes('terminales') ? { label: 'Abrir', press: () => update($, tab, () => 'terminales' as const) } : undefined,
+        },
+        {
+          key: 'piloto',
+          on: x.plugins.includes('piloto') && ((await $.state.get(pilotoAuto)).value ?? true),
+          name: 'Piloto',
+          what: 'Le dices qué quieres lograr y se planea, reparte, ejecuta y revisa solo, con tope de pasos y freno si queda poco límite.',
+          stat: !x.plugins.includes('piloto') ? 'no instalado' : (await $.state.get(pilotoMision)).value?.activa ? 'en marcha' : 'en espera',
+          action: x.plugins.includes('piloto') ? { label: 'Abrir', press: () => update($, tab, () => 'equipo' as const) } : undefined,
         },
         {
           key: 'web',

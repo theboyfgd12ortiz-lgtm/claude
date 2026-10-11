@@ -358,3 +358,32 @@ test('the Terminales tab shows this terminal, the others and a way to open one i
   expect(await ui.find({ key: 'term-msg' })).toBeDefined()
   await ui.unmount()
 })
+
+/** A stand-in for piloto: a mission in progress, 2 of 5 steps done. */
+const pilotoSimulado = {
+  name: 'piloto',
+  register: (on: On) => {
+    on('session.start', async ($, e, next) => {
+      await $.state.set({ plugin: 'piloto', key: 'mision' } as const, { activa: true, objetivo: 'una tienda', hechos: 2, total: 5, siguiente: 'probar en móvil', continuaciones: 2, max: 8, fin: '' })
+
+      return next(e)
+    })
+  },
+}
+
+test('the Equipo tab shows the Piloto: a box to say what you want, the progress and a way to stop it', { plugins: [pilotoSimulado, equipoSimulado] }, async ($, on) => {
+  mock.clock(on)
+  on('command.register', () => ({ value: { command: 'x' } }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+  on('command.list', () => ({ value: [] }) as never)
+  on('session.start', () => ({ cwd: '/r' }) as never)
+  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
+
+  const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'tab-equipo' })
+  expect(await ui.find({ key: 'pil-ask' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Sigue: probar en móvil/ })).toBeDefined()
+  expect(await ui.find({ key: 'pil-stop' })).toBeDefined()
+  expect(await ui.find({ key: 'pil-auto' })).toBeDefined()
+  await ui.unmount()
+})

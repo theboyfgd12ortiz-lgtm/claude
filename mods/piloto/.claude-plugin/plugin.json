@@ -1,0 +1,6 @@
+{
+  "name": "piloto",
+  "description": "Le dices qué quieres lograr y Claude lo planea, lo reparte con el equipo de agentes baratos, lo ejecuta paso a paso, lo revisa y te da un resumen, sin que tengas que ir empujándolo. Con tope de pasos y frenos de presupuesto.",
+  "author": { "name": "theboyfgd12ortiz-lgtm" },
+  "types": "./types/index.d.ts"
+}
