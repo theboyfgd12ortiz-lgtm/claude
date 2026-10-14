@@ -10,11 +10,19 @@
 - OpenCode: delegar-opencode.ps1 trabaja en copia sin claves; /opencode con reglas; CLAUDE.md global ajustado.
 - Pruebas: 105 pass, 0 fail; validate OK en los 7.
 
-## Pendiente (necesita OK de ortiz)
-1. Commit + push, para que llegue a su Claude Code.
-2. En ~/.claude/settings.json: quitar los plugins borrados, apagar ponytail y rtk-hook, borrar CLAUDE_CODE_PLUGIN_DIRS (apunta a una carpeta que no existe).
-3. Instalar el CLI de OpenCode: npm i -g opencode-ai.
+- Subido (7856efe). Instalación de ortiz limpia: 9 mods viejos desinstalados, ponytail y rtk-hook apagados, CLAUDE_CODE_PLUGIN_DIRS quitado.
+
+## Hecho (2026-10-14, segunda vuelta)
+- Panel: el "no instalado" de equipo era una carrera al arrancar (lista de comandos leída antes de que equipo registrara los suyos). Ahora vuelve a mirar si falta un mod propio.
+- Segundo cerebro: memoria de Claude unificada en ~/.claude/cerebro (autoMemoryDirectory en ~/.claude/settings.json). 49 notas repartidas en 7 carpetas -> 40 fusionadas. Originales intactos. Respaldo: settings.json.bak-cerebro.
+- memoria: notas por proyecto apagadas por defecto (repetían la memoria de Claude; en 4 días solo escribieron 1 archivo). Traspaso sigue igual.
+- guardian revisa PowerShell y cmd. piloto lee el plan de una lista "- [ ]" cuando no hay TodoWrite.
+- Seguridad: claude-security (oficial) instalado; reglas piden security-review y simplify. Cloudflare descartado (no trae seguridad).
+- Pruebas: 109 pass, 0 fail; validate OK en los 6; prueba-git 16 ok.
+
+## Pendiente
+- ortiz: reiniciar Claude Code y comprobar /mods y que Claude recuerde sus proyectos en un chat sin carpeta.
+- OpenCode: cerrado por pedido de ortiz.
 
 ## Problemas conocidos
-- El piloto sigue el plan con TodoWrite; en la app de escritorio no existe esa herramienta.
-- guardian no revisa comandos de PowerShell.
+- No pude probar el cerebro global con `claude -p` (la terminal no tiene sesión iniciada); se confirmó que la opción existe en el programa.

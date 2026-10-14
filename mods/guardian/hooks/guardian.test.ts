@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { discardsWork, judgeCommand, judgeSecretPath, secretoEn } from './rules'
+import { discardsWork, judgeCommand, judgePowerShell, judgeSecretPath, secretoEn } from './rules'
 
 describe('rules', () => {
   test('blocks catastrophic commands', () => {
@@ -46,6 +46,48 @@ describe('rules', () => {
     }
   })
 
+  test('PowerShell: blocks catastrophic commands', () => {
+    for (const cmd of [
+      'Remove-Item -Recurse -Force C:\\',
+      String.raw`Remove-Item -Path C:\Users\thebo -Recurse`,
+      String.raw`rm -r -fo $env:USERPROFILE\*`,
+      'Remove-Item -Recurse $HOME',
+      String.raw`del /s /q C:\Windows`,
+      'cmd /c rd /s /q C:\\',
+      String.raw`powershell -Command "Remove-Item -Recurse -Force C:\Users"`,
+      'Remove-Item -Recurse:$true C:\\',
+      String.raw`Get-ChildItem C:\ -Recurse | Remove-Item -Force`,
+      'Get-ChildItem $HOME | ForEach-Object { Remove-Item $_ -Recurse -Force }',
+      String.raw`& { Remove-Item -Recurse -Force C:\Users }`,
+      'Format-Volume -DriveLetter D',
+      'format C:',
+      'Get-Content .env',
+      String.raw`gc C:\proyecto\.env.local`,
+      String.raw`type C:\Users\thebo\.ssh\id_ed25519`,
+      'git push --force origin main',
+    ]) {
+      expect(judgePowerShell(cmd)).toBeDefined()
+    }
+  })
+
+  test('PowerShell: lets everyday commands through', () => {
+    for (const cmd of [
+      'Remove-Item -Recurse -Force node_modules',
+      String.raw`Remove-Item -Recurse C:\Users\thebo\proyecto\dist`,
+      String.raw`rm -r .\build`,
+      String.raw`Get-ChildItem .\dist -Recurse | Remove-Item -Force`,
+      'cd ~; Remove-Item -Recurse dist',
+      'Get-ChildItem -Recurse | Select-String "rm"',
+      'Get-Content .env.example',
+      'Get-ChildItem -Recurse C:\\',
+      'git push -u origin feature',
+      'npm test',
+      String.raw`Write-Output "Remove-Item -Recurse C:\"`,
+    ]) {
+      expect(judgePowerShell(cmd)).toBeUndefined()
+    }
+  })
+
   test('secret paths', () => {
     expect(judgeSecretPath('/app/.env')).toBeDefined()
     expect(judgeSecretPath('/app/.env.production')).toBeDefined()
@@ -77,6 +119,16 @@ test('denies a destructive Bash call and runs a safe one', async ($, on) => {
   const good = await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(good.deny).toBeUndefined()
   expect(good.text ?? (good.result as { stdout: string }).stdout).toMatch(/ran/)
+})
+
+test('denies a destructive PowerShell call', async ($, on) => {
+  mock.clock(on)
+  on('tool.call', { tool: 'PowerShell' } as never, (() => ({ result: { stdout: 'ran', stderr: '', interrupted: false } })) as never)
+
+  const bad = await $.tool.call({ tool: 'PowerShell', command: 'Remove-Item -Recurse -Force C:\\' } as never)
+  expect(bad.deny).toMatch(/guardian: blocked/)
+  const good = await $.tool.call({ tool: 'PowerShell', command: 'Get-ChildItem' } as never)
+  expect(good.deny).toBeUndefined()
 })
 
 test('denies reading a .env file even without a clock', async ($, on) => {

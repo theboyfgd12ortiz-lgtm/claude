@@ -63,7 +63,6 @@ const shown = atom({ plugin: 'mods-panel', key: 'shown' } as const, null)
 const presupuestoEstado = { plugin: 'selector-modelo', key: 'presupuesto' } as const
 const memoriaNotas = { plugin: 'memoria', key: 'notas' } as const
 const memoriaCuando = { plugin: 'memoria', key: 'at' } as const
-const memoriaAuto = { plugin: 'memoria', key: 'isAuto' } as const
 const equipoAgentes = { plugin: 'equipo', key: 'agentes' } as const
 const pilotoMision = { plugin: 'equipo', key: 'mision' } as const
 const pilotoAuto = { plugin: 'equipo', key: 'pilotoAuto' } as const
@@ -150,6 +149,9 @@ const readRtk = async ($: EngineInterface): Promise<RtkInfo | null> => {
 }
 
 /** Plugins that have at least one command or skill loaded, by name. */
+/** Our own mods: if one is missing from the saved list it may just not have registered yet at start-up, so look again. */
+const PROPIOS = ['selector-modelo', 'equipo', 'guardian', 'memoria', 'web']
+
 const listPlugins = async ($: EngineInterface): Promise<string[]> => {
   const list = await $.command.list().catch(() => [])
 
@@ -222,7 +224,7 @@ const summary = async ($: EngineInterface): Promise<string> => {
   const blocks = (await $.state.get(guardianBlocks)).value ?? []
   const steps = await read($, plan)
   const items = (await read($, feed)).slice(-8)
-  const plugins = x.plugins.length > 0 ? x.plugins : await listPlugins($)
+  const plugins = PROPIOS.every(p => x.plugins.includes(p)) ? x.plugins : await listPlugins($)
   const lines = [
     '**Centro de control** (aquí no se puede dibujar el panel; este es el resumen)',
     '',
@@ -414,8 +416,8 @@ export const register: Register = on => {
 
     // Shared reads.
     const stored = await read($, extras)
-    // Before the first refresh (right at start-up) ask for the plugin list directly.
-    const x = stored.plugins.length > 0 ? stored : { ...stored, plugins: await listPlugins($) }
+    // Right at start-up the saved list can predate other mods registering their commands: ask again until all are seen.
+    const x = PROPIOS.every(p => stored.plugins.includes(p)) ? stored : { ...stored, plugins: await listPlugins($) }
     const nivel = (await $.state.get(selNivel)).value ?? 4
     const modo = (await $.state.get(selModo)).value ?? 'auto'
     const hasSelector = x.plugins.includes('selector-modelo') || (await $.state.get(selNivel)).version > 0
@@ -980,9 +982,9 @@ export const register: Register = on => {
         },
         {
           key: 'memoria',
-          on: has('memoria') && ((await $.state.get(memoriaAuto)).value ?? true),
+          on: has('memoria'),
           name: 'Memoria',
-          what: 'Recuerda el proyecto (cómo probarlo, publicarlo, decisiones) y guarda el progreso para seguir en una charla limpia.',
+          what: 'Guarda el progreso para seguir en una charla limpia. Lo que Claude aprende de ti vive en tu cerebro global (~/.claude/cerebro).',
           stat: !has('memoria')
             ? 'no instalado'
             : `${(await $.state.get(memoriaNotas)).value ?? 0} notas${((await $.state.get(memoriaCuando)).value ?? 0) > 0 ? ` · actualizada ${hace((await $.state.get(memoriaCuando)).value ?? now, now)}` : ''}${nota ? ` · progreso guardado ${hace(nota.at, now)}` : ''}`,

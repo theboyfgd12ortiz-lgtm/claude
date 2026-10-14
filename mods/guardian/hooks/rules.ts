@@ -5,7 +5,7 @@ const ROOTISH = /^(\/|\/\*|~|~\/|~\/\*|\$HOME|\$HOME\/|\$HOME\/\*|\$\{HOME\}\/?|
 
 /** Files whose content is a secret: reading them puts credentials in context. */
 const SECRET_FILE =
-  /(^|[\/\s'"=])(\.env(\.(?!example\b|sample\b|template\b|dist\b|defaults\b)[\w.-]+)?|id_(rsa|dsa|ecdsa|ed25519)|[\w.-]+\.(pem|p12|pfx|key)|\.netrc|\.pgpass|credentials(\.json)?|\.aws\/credentials|\.npmrc|\.pypirc)(?=$|[\s'";|&)<>])/
+  /(^|[\/\\\s'"=])(\.env(\.(?!example\b|sample\b|template\b|dist\b|defaults\b)[\w.-]+)?|id_(rsa|dsa|ecdsa|ed25519)|[\w.-]+\.(pem|p12|pfx|key)|\.netrc|\.pgpass|credentials(\.json)?|\.aws\/credentials|\.npmrc|\.pypirc)(?=$|[\s'";|&)<>])/
 
 const READERS = /^(cat|less|more|head|tail|bat|xxd|od|strings|base64|curl|source|grep|rg|awk|nl|tac)$/
 
@@ -136,6 +136,65 @@ export const judgeCommand = (command: string): string | undefined => {
   }
 
   if (/:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(command)) return 'bomba fork (cuelga la máquina)'
+
+  return undefined
+}
+
+/** Windows paths whose recursive removal would wipe the machine, the system or the home folder. */
+const ROOTISH_WIN =
+  /^([A-Za-z]:|~|\$HOME|\$env:(USERPROFILE|HOMEDRIVE|SystemDrive|SystemRoot|windir|ProgramFiles)|[A-Za-z]:[\\/](Users|Windows|Program Files( \(x86\))?)|[A-Za-z]:[\\/]Users[\\/][^\\/*]+)[\\/]?(\*(\.\*)?)?$/i
+
+const PS_REMOVE = /^(remove-item|rm|ri|del|erase|rd|rmdir)$/i
+const PS_RECURSE = /^(-r(e(c(u(r(s(e)?)?)?)?)?)?(:\S*)?|\/s)$/i
+const PS_READERS = /^(get-content|gc|type|select-string|sls|format-hex)$/i
+/** A remover fed by a pipe: `... | Remove-Item`, `... | ForEach-Object { rm $_ }`. */
+const PS_PIPED_REMOVE = /\|[^|;]*?(^|[\s{(&])(remove-item|rm|ri|del|erase)(?=$|[\s;})])/i
+
+const isRootish = (word: string): boolean => {
+  const path = word.replace(/^-(path|literalpath):/i, '')
+
+  return ROOTISH_WIN.test(path) || ROOTISH.test(path)
+}
+
+/** Why a PowerShell (or cmd) command must not run, or undefined when it may. */
+export const judgePowerShell = (command: string): string | undefined => {
+  // git push --force, cat .env, bash -c ... are judged the same as in Bash.
+  const shared = judgeCommand(command)
+  if (shared !== undefined) return shared
+
+  // `Get-ChildItem C:\ -Recurse | Remove-Item` deletes everything listed.
+  if (PS_PIPED_REMOVE.test(command) && parse(command).some(({ words }) => commandWords(words).some(isRootish))) {
+    return 'borrado en cadena desde la raíz del disco o tu carpeta personal'
+  }
+
+  for (const { text, words } of parse(command)) {
+    const c = commandWords(words)
+    const cmd = (c[0] ?? '').toLowerCase()
+
+    // `cmd /c ...` and `powershell -Command ...` run another line: judge it too.
+    const at = /^cmd(\.exe)?$/.test(cmd)
+      ? c.findIndex(x => /^\/[ck]$/i.test(x))
+      : /^(powershell|pwsh)(\.exe)?$/.test(cmd)
+        ? c.findIndex(x => /^-(c|command)$/i.test(x))
+        : -1
+    if (at >= 0) {
+      const inner = judgePowerShell(c.slice(at + 1).join(' '))
+      if (inner !== undefined) return inner
+    }
+
+    // The remover may sit inside `{ }`, after `&` or after ForEach-Object, not only first.
+    const k = c.findIndex(x => PS_REMOVE.test(x))
+    if (k >= 0 && c.slice(k + 1).some(x => PS_RECURSE.test(x))) {
+      const target = c.slice(k + 1).find(isRootish)
+      if (target !== undefined) return `borrado recursivo de "${target}": borraría el sistema o tu carpeta personal`
+    }
+
+    if (/^(format-volume|clear-disk|initialize-disk|remove-partition)$/.test(cmd) || (cmd === 'format' && c.some(x => /^[a-z]:$/i.test(x)))) {
+      return 'formatea un disco'
+    }
+
+    if (PS_READERS.test(cmd) && SECRET_FILE.test(text)) return 'lee un archivo de secretos (.env, llave privada, credenciales)'
+  }
 
   return undefined
 }

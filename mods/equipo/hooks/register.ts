@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Mision, Paso, Registro } from '../types'
 import { AVISO_COMPACTAR, pistaDeEquipo } from './contexto'
-import { decidir, esTareaGrande, hayPruebasEnPackage, limpiarEnvoltorios, MAX_CONTINUACIONES, protocolo, recortar, resumenPlan } from './mision'
+import { decidir, esTareaGrande, hayPruebasEnPackage, limpiarEnvoltorios, MAX_CONTINUACIONES, planDeTexto, protocolo, recortar, resumenPlan, unirPlan } from './mision'
 import { AGENTES, ahorro, dificultadDe, familiaDe, familiaDeNivel, rango, GUIA, modeloParaAgente } from './reglas'
 
 const VACIA: Mision = { activa: false, objetivo: '', hechos: 0, total: 0, siguiente: null, continuaciones: 0, max: MAX_CONTINUACIONES, fin: '', revision: 'sin revisar' }
@@ -52,6 +52,8 @@ const lanzar = async ($: EngineInterface, args: Parameters<EngineInterface['agen
 
 // Lo que el piloto recuerda entre turnos (a nivel del módulo: las funciones que reciben `$` se declaran fuera de register).
 let plan: Paso[] = []
+// Si TodoWrite dio el plan, las listas con casillas del texto no lo tocan.
+let planDeTodoWrite = false
 let ultimoSiguiente: string | null = null
 let repeticiones = 0
 let yaRevisado = false
@@ -69,6 +71,7 @@ const hayPruebas = async ($: EngineInterface): Promise<boolean> => {
 
 const empezar = async ($: EngineInterface, objetivo: string) => {
   plan = []
+  planDeTodoWrite = false
   ultimoSiguiente = null
   repeticiones = 0
   yaRevisado = false
@@ -152,6 +155,7 @@ export const register: Register = on => {
     const ran = await next(e)
     if (ran.deny !== undefined || e.agentId !== undefined) return ran
     plan = e.todos.map(t => ({ texto: t.content, hecho: t.status === 'completed' }))
+    planDeTodoWrite = true
     const r = resumenPlan(plan)
     await update($, mision, m => ({ ...m, hechos: r.hechos, total: r.total, siguiente: r.siguiente }))
 
@@ -267,7 +271,11 @@ export const register: Register = on => {
     lanzadosEnTurno = 0
     const m = await read($, mision)
     if (!m.activa) return done
+    // Sin TodoWrite (app de escritorio) el plan llega como lista con casillas en la respuesta.
+    const escrito = !planDeTodoWrite && typeof e.answer === 'string' ? planDeTexto(e.answer) : []
+    if (escrito.length > 0) plan = unirPlan(plan, escrito)
     const r = resumenPlan(plan)
+    if (escrito.length > 0) await update($, mision, x => ({ ...x, hechos: r.hechos, total: r.total, siguiente: r.siguiente }))
     repeticiones = r.siguiente !== null && r.siguiente === ultimoSiguiente ? repeticiones + 1 : 0
     ultimoSiguiente = r.siguiente
     const presupuesto = (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.nivel ?? 'normal'

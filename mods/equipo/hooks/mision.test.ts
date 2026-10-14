@@ -1,6 +1,21 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { decidir, esTareaGrande, hayPruebasEnPackage, limpiarEnvoltorios, MAX_CONTINUACIONES, MAX_RONDAS, protocolo, resumenPlan, TEXTO_PLAN, TEXTO_REVISION } from './mision'
+import { decidir, esTareaGrande, hayPruebasEnPackage, limpiarEnvoltorios, MAX_CONTINUACIONES, MAX_RONDAS, planDeTexto, protocolo, resumenPlan, TEXTO_PLAN, TEXTO_REVISION, unirPlan } from './mision'
+
+test('sin TodoWrite el plan se lee de la lista con casillas; la última marca de cada paso manda', () => {
+  const texto = 'Plan:\n- [ ] Leer el código\n- [ ] Arreglar el formulario\n\nHice lo primero.\n\n- [x] Leer el código\n- [ ] Arreglar el formulario\n* [X] Probar'
+  expect(planDeTexto(texto)).toEqual([
+    { texto: 'Leer el código', hecho: true },
+    { texto: 'Arreglar el formulario', hecho: false },
+    { texto: 'Probar', hecho: true },
+  ])
+  expect(planDeTexto('Sin plan aquí. - [ ] no cuenta si no empieza la línea')).toEqual([])
+  expect(unirPlan([{ texto: 'a', hecho: true }, { texto: 'b', hecho: false }], [{ texto: 'b', hecho: true }, { texto: 'c', hecho: false }])).toEqual([
+    { texto: 'a', hecho: true },
+    { texto: 'b', hecho: true },
+    { texto: 'c', hecho: false },
+  ])
+})
 
 const base = { activa: true, razon: 'answer', continuaciones: 0, max: MAX_CONTINUACIONES, total: 4, hechos: 1, siguiente: 'conectar el formulario', presupuesto: 'normal', repeticiones: 0, yaRevisado: false, veredicto: null as 'ok' | 'problemas' | null, rondas: 0, sinVeredicto: 0 }
 
@@ -170,6 +185,32 @@ test('un pedido corto no arranca nada, aunque el piloto auto esté on, y /piloto
   await $.turn.complete(turno())
   await clock.advance(0)
   expect(enviados.length).toBe(antes)
+})
+
+test('sin TodoWrite el piloto sigue el plan escrito con casillas y no pierde los pasos hechos', async ($, on) => {
+  const { clock, enviados } = montar(on)
+  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
+  await $.command.run({ command: 'piloto', args: 'monta una tienda en línea', ...CMD } as never)
+  const respuesta = (answer: string) => ({ reason: 'answer', answer, durationMs: 1000, isAborted: false, turnId: 't' }) as never
+
+  await $.turn.complete(respuesta('Plan:\n- [x] paso a\n- [ ] paso b\n- [ ] paso c'))
+  await clock.advance(0)
+  expect(enviados.at(-1)).toMatch(/paso 2 de 3: paso b/)
+
+  // Solo repite lo que queda: lo hecho se conserva.
+  await $.turn.complete(respuesta('- [x] paso b\n- [ ] paso c'))
+  await clock.advance(0)
+  expect(enviados.at(-1)).toMatch(/paso 3 de 3: paso c/)
+})
+
+test('si TodoWrite dio el plan, una lista con casillas en el texto no lo cambia', async ($, on) => {
+  const { clock, enviados } = montar(on)
+  await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true, source: 'startup' } as never)
+  await $.command.run({ command: 'piloto', args: 'monta una tienda en línea', ...CMD } as never)
+  await $.tool.call(plan(1))
+  await $.turn.complete({ reason: 'answer', answer: 'Ideas:\n- [ ] otra cosa\n- [x] algo más', durationMs: 1000, isAborted: false, turnId: 't' } as never)
+  await clock.advance(0)
+  expect(enviados.at(-1)).toMatch(/paso 2 de 3: paso b/)
 })
 
 test('el protocolo pide pruebas primero si hay suite, y comprobar a mano si no', () => {

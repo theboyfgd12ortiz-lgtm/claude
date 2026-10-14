@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { GuardianBlock } from '../types'
 import { cambiosDesde, crearPunto, podar, restaurar, type Run } from './git'
-import { discardsWork, judgeCommand, judgeSecretPath, secretoEn } from './rules'
+import { discardsWork, judgeCommand, judgePowerShell, judgeSecretPath, secretoEn } from './rules'
 
 const ASK = 'If the user explicitly wants this, ask them to run it themselves or to type /guardian off.'
 
@@ -56,6 +56,32 @@ const refuse = async (
   return { deny } as const
 }
 
+/** Why a shell command must be refused (a deny result), or undefined when it may run. */
+const blockShell = async ($: EngineInterface, command: string, judge: (command: string) => string | undefined) => {
+  const why = judge(command)
+  if (why !== undefined) {
+    return refuse($, command, why, `${$.plugin.name}: blocked: ${why}. ${ASK}`)
+  }
+
+  if (discardsWork(command)) {
+    const status = await $.process.run(['git', 'status', '--porcelain'], { timeoutMs: 5000 }).catch(() => undefined)
+    const dirty = status?.stdout.trim() ?? ''
+    if (dirty.length > 0) {
+      const files = dirty.split('\n').slice(0, 8).join(', ')
+      const reason = `borraría cambios sin commitear (${files})`
+
+      return refuse(
+        $,
+        command,
+        reason,
+        `${$.plugin.name}: blocked: ${reason}. Commit or \`git stash\` them first, or confirm with the user. ${ASK}`,
+      )
+    }
+  }
+
+  return undefined
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -84,33 +110,13 @@ export const register: Register = on => {
     return { text: `Guardian está ${paused ? 'EN PAUSA en esta sesión (/guardian on para reactivarlo)' : 'ACTIVO'}.` }
   })
 
-  // Destructive shell commands.
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (await read($, isPaused)) return next(e)
-
-    const why = judgeCommand(e.command)
-    if (why !== undefined) {
-      return refuse($, e.command, why, `${$.plugin.name}: blocked: ${why}. ${ASK}`)
-    }
-
-    if (discardsWork(e.command)) {
-      const status = await $.process.run(['git', 'status', '--porcelain'], { timeoutMs: 5000 }).catch(() => undefined)
-      const dirty = status?.stdout.trim() ?? ''
-      if (dirty.length > 0) {
-        const files = dirty.split('\n').slice(0, 8).join(', ')
-        const reason = `borraría cambios sin commitear (${files})`
-
-        return refuse(
-          $,
-          e.command,
-          reason,
-          `${$.plugin.name}: blocked: ${reason}. Commit or \`git stash\` them first, or confirm with the user. ${ASK}`,
-        )
-      }
-    }
-
-    return next(e)
-  }).catch(($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }))
+  // Destructive shell commands: Bash, and PowerShell on Windows.
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => (await read($, isPaused) ? next(e) : ((await blockShell($, e.command, judgeCommand)) ?? next(e)))).catch(
+    ($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }),
+  )
+  on('tool.call', { tool: 'PowerShell' }, async ($, e, next) => (await read($, isPaused) ? next(e) : ((await blockShell($, e.command, judgePowerShell)) ?? next(e)))).catch(
+    ($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }),
+  )
 
   // Secrets read into the conversation.
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {

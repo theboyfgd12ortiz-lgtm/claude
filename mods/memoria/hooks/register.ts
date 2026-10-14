@@ -6,7 +6,8 @@ import { aceptar, ARCHIVO, contarNotas, PEDIDO, SECCION, sinCabecera, tocaActual
 import { ARCHIVO as ARCHIVO_TRASPASO, ARCHIVO_RAIZ, mensajeRetomar, PEDIDO as PEDIDO_TRASPASO, resumenDe, sinFecha, tocaGuardar } from './traspaso'
 
 const estado = atom({ plugin: 'memoria', key: 'notas' } as const, 0)
-const isAuto = atom({ plugin: 'memoria', key: 'isAuto' } as const, true)
+// Apagado por defecto: la memoria propia de Claude (cerebro global en ~/.claude/cerebro) ya apunta lo importante.
+const isAuto = atom({ plugin: 'memoria', key: 'isAuto' } as const, false)
 const cuando = atom({ plugin: 'memoria', key: 'at' } as const, 0)
 const traspaso = atom({ plugin: 'memoria', key: 'traspaso' } as const, null)
 const traspasoAuto = atom({ plugin: 'memoria', key: 'traspasoAuto' } as const, true)
@@ -99,7 +100,7 @@ const guardarNota = async ($: EngineInterface, extra: string, auto: boolean): Pr
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'memoria', description: 'Las notas que Claude recuerda de este proyecto: /memoria · actualizar · borrar · on · off', argumentHint: 'actualizar | borrar | on | off' })
-    if ((await $.store.get('isAuto').catch(() => undefined)) === false) await update($, isAuto, () => false)
+    if ((await $.store.get('isAuto').catch(() => undefined)) === true) await update($, isAuto, () => true)
     await $.command.register({
       name: 'guardar',
       description: 'Guarda el progreso en .claude/traspaso.md (también se guarda solo cuando la charla se llena)',
@@ -112,7 +113,7 @@ export const register: Register = on => {
     ultimoTraspaso = 0
     porcientoUltimo = 0
     await cargar($)
-    try { await publicar($) } catch (err) { console.log("PUBERR", String(err)) }
+    await publicar($).catch(() => undefined)
 
     return next(e)
   })
@@ -195,7 +196,7 @@ export const register: Register = on => {
       return { text: `Memoria automática ${arg === 'on' ? 'activada' : 'apagada'}.` }
     }
 
-    return { text: notas.trim() === '' ? 'Todavía no hay notas de este proyecto. Se apuntan solas después de un trabajo importante.' : `Lo que recuerdo de este proyecto (${ARCHIVO}):\n${notas}` }
+    return { text: notas.trim() === '' ? 'Todavía no hay notas de este proyecto. Lo general ya lo guarda la memoria de Claude; aquí se apuntan con /memoria actualizar (o /memoria on para que sea solo).' : `Lo que recuerdo de este proyecto (${ARCHIVO}):\n${notas}` }
   })
 
   on('command.run', { command: 'guardar' }, async ($, e) => {

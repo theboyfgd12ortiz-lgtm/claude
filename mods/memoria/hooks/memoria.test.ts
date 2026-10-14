@@ -27,7 +27,7 @@ test('cuenta notas, quita la cabecera y decide cuándo actualizar', () => {
   expect(PEDIDO('- x')).toContain('- x')
 })
 
-test('lee las notas al empezar y las pone en el prompt; después de trabajar las actualiza solo', async ($, on) => {
+test('lee las notas al empezar y las pone en el prompt; con /memoria on, después de trabajar las actualiza solo', async ($, on) => {
   const reloj = mock.clock(on)
   mock.store(on)
   const archivos = new Map<string, string>([['.claude/memoria.md', '<!-- memoria 2026-10-01T00:00:00.000Z -->\n\n- Sitio de Panadería Sol, estático\n']])
@@ -56,6 +56,7 @@ test('lee las notas al empezar y las pone en el prompt; después de trabajar las
   }) as never)
 
   await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
+  await $.command.run({ command: 'memoria', args: 'on', ...CMD } as never)
   const compuesto = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] })
   expect(compuesto.sections.map(s => s.id)).toContain('memoria:proyecto')
   expect(compuesto.sections.find(s => s.id === 'memoria:proyecto')?.text).toMatch(/Panadería Sol/)

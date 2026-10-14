@@ -9,7 +9,7 @@ Seis mods para Claude Code que hacen lo que antes hacían dieciséis. Con **`/mo
 | **selector-modelo** (el director) | Elige modelo y esfuerzo por pedido (9 niveles, Haiku → Sonnet → Opus) y compacta cuando la charla se llena. Cuida tu límite de uso: desde el 80 % baja el tope y pide respuestas económicas; al renovarse, vuelve a lo normal. Trae **un solo bloque de reglas**: verdad antes que agrado (no te da la razón si no la tienes), sin relleno (anti-slop), plan antes de trabajos de varias partes, cambio mínimo, verificar antes de decir "listo", Context7 para librerías y sequential-thinking para problemas difíciles. **Prompt maestro automático:** con cada pedido manda a Claude una sola nota según lo que tu mensaje necesita: si es vago, que diga qué entendió y pregunte lo esencial (máx. 3); si es grande, que muestre el plan primero. `/mejorar` reescribe tu borrador. Avisa si se cambió código sin probarlo. `/nivel`, `/presupuesto`. |
 | **equipo** (el orquestador) | Agentes baratos con su especialidad: explorador e investigador (Haiku), obrero, arreglador y revisor (Sonnet). Ajusta el modelo según `dificultad: baja/media/alta`, máximo 3 a la vez y 6 por tarea. **Piloto** opcional: `/piloto <objetivo>` planea, reparte, avanza solo (tope de 8 pasos), pasa el revisor y te deja un resumen. Ya no arranca solo: lo activas tú (`/piloto auto on` si lo quieres automático). |
 | **guardian** | Bloquea `rm -rf` de la raíz o tu carpeta, `git push --force`, formatear discos, leer `.env` o llaves, y escribir claves reales dentro del código. Antes de cada pedido guarda un punto de restauración con git; en el panel, **Volver aquí** deshace lo que hizo Claude. `/guardian off` lo pausa. |
-| **memoria** (segundo cerebro) | Apunta en `.claude/memoria.md` lo que sirve a futuro (cómo probar y publicar, decisiones, tus correcciones) y lo lee al empezar. Cuando la charla se llena guarda el progreso en `.claude/traspaso.md`; en una charla limpia, **Retomar**. `/memoria`, `/guardar`, `/retomar`. Junto con graphify (mapa del código) es tu segundo cerebro. |
+| **memoria** (segundo cerebro) | El cerebro de verdad es la memoria propia de Claude, puesta en **una sola carpeta para todos los proyectos** (`~/.claude/cerebro`, con `"autoMemoryDirectory": "~/.claude/cerebro"` en `~/.claude/settings.json`): quién eres, tus clientes, tus correcciones, lo que funciona. Antes estaba partida en una carpeta por proyecto y un chat sin carpeta no veía nada. Este mod guarda el progreso en `.claude/traspaso.md` cuando la charla se llena y en una charla limpia ofrece **Retomar** (`/guardar`, `/retomar`). Las notas por proyecto (`.claude/memoria.md`) quedan apagadas porque repetían a la memoria de Claude: `/memoria on` las enciende. Junto con graphify (mapa del código) forman tu segundo cerebro. |
 | **web** | Revisa una página (celular, título y descripción para Google, imágenes, enlaces rotos, velocidad) y la revisa sola cuando publicas en Netlify, Vercel o Firebase. `/sitio`. |
 | **mods-panel** | El Centro de control (`/mods`): límites de uso, qué hace Claude ahora y su plan, archivos cambiados, ahorro, modelo, equipo y web. |
 
@@ -21,6 +21,10 @@ Seis mods para Claude Code que hacen lo que antes hacían dieciséis. Con **`/mo
 - **humanizer**: solo cuando lo pides; quita lo que suena a IA de un texto.
 - **token-optimizer**: barra de estado y auditoría del contexto. Licencia no comercial (gratis para negocios de menos de 5 personas y menos de US$20.000 al mes).
 - **MCP**: Context7 (documentación al día) y sequential-thinking (razonar por pasos), a nivel usuario.
+- **claude-security** (oficial de Anthropic): escaneo de seguridad profundo de un proyecto, solo cuando lo pides con `/claude-security`. Para cada cambio, las reglas del director piden la skill `security-review` (viene con Claude Code) si tocaste inicio de sesión, pagos, datos de clientes, claves o Supabase, o vas a publicar.
+- **Simplificador**: la skill `simplify` (viene con Claude Code). Las reglas del director la piden tras un cambio grande de código.
+
+No se instaló la skill de Cloudflare: sus 18 skills son para construir y publicar en Cloudflare (Workers, R2, etc.) y ninguna revisa seguridad de un sitio. Tus páginas van en Netlify; solo gastaría contexto.
 
 Se quitó **ponytail**: repetía la regla de "cambio mínimo" que ya trae el director.
 
@@ -50,8 +54,8 @@ Después reinicia Claude Code y escribe `/mods`.
 ## Límites que conviene saber
 
 - Las reglas empujan a Claude a ser directo y a llevarte la contraria cuando no tienes razón, pero son instrucciones, no una garantía.
-- El seguimiento del piloto usa la lista de tareas `TodoWrite`. Si tu versión de Claude Code no la tiene (pasa en la app de escritorio), el piloto pide el plan una vez y luego se detiene.
-- El guardián revisa comandos de Bash, no de PowerShell. Es un seguro contra accidentes, no contra alguien con mala intención.
+- El piloto sigue el plan con `TodoWrite`; donde no existe (la app de escritorio) lo lee de la lista con casillas `- [ ]` / `- [x]` que Claude escribe en su respuesta.
+- El guardián revisa comandos de Bash y de PowerShell (también `cmd /c` y `powershell -Command`). Es un seguro contra accidentes, no contra alguien con mala intención.
 
 ## Desarrollo
 

@@ -9,6 +9,8 @@ export const REGLAS = `# Reglas de trabajo
 - Si el trabajo tiene varias partes, muestra primero el plan en 3 a 6 líneas (paso y "listo cuando") y ve marcando el avance.
 - Cambio mínimo y completo, en el estilo del código que ya existe. Sin refactors, extras ni código a medias.
 - Verifica antes de decir "listo": corre pruebas, build o reproduce el comportamiento. Reporta los fallos reales.
+- Simplifica: tras un cambio de código grande (3 o más archivos o una función nueva larga), pasa la skill simplify antes de cerrar.
+- Seguridad: si tocaste inicio de sesión, pagos, datos de clientes, claves, Supabase o vas a publicar, pasa la skill security-review sobre el cambio; para revisar un proyecto entero, ofrece /claude-security.
 - Librerías y APIs: consulta Context7 antes de escribir de memoria. Problema difícil de causa desconocida: razona por pasos con sequential-thinking.
 - Sin relleno: nada de saludos, "claro", "por supuesto", resúmenes de lo que ya hiciste, emojis decorativos ni listas de más. En diseño, nada de plantilla genérica (gradiente morado, tarjetas iguales, lorem ipsum); en texto, nada que suene a IA.
 - Gasta tokens donde cuentan: busca con Grep/Glob antes de leer, lee solo las líneas necesarias, no releas lo que no cambió. Lo pesado de leer o buscar, a equipo:explorador (barato). Si existe graphify-out/, consúltalo primero.

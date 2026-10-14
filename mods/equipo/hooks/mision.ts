@@ -46,7 +46,7 @@ export const recortar = (texto: string, n: number): string => {
  */
 export const protocolo = (objetivo: string, tienePruebas = false): string =>
   `<piloto>Misión: ${recortar(limpiarEnvoltorios(objetivo), 400)}. Si falta algo que cambie mucho el resultado, pregunta antes de empezar; si no, sigue sin pedirme confirmaciones. ` +
-  '1) Haz el plan con TodoWrite: 3 a 8 pasos, cada uno con su criterio de "terminado". ' +
+  '1) Haz el plan con TodoWrite: 3 a 8 pasos, cada uno con su criterio de "terminado". Si no tienes TodoWrite, escríbelo como lista "- [ ] paso" y al final de cada respuesta repite la lista marcando "- [x]" lo hecho. ' +
   '2) Ejecuta paso a paso como director: lo pesado de leer, buscar o hacer repártelo con el equipo (equipo:explorador, equipo:obrero, equipo:investigador), con "dificultad: baja|media|alta" en cada encargo; lo pequeño hazlo tú. Marca cada paso al terminarlo. ' +
   (tienePruebas
     ? 'Método: pruebas primero. En cada cambio de código escribe o ajusta una prueba que falle, haz que pase con el cambio mínimo y corre toda la suite antes del siguiente paso; si algo falla, equipo:arreglador. '
@@ -56,11 +56,27 @@ export const protocolo = (objetivo: string, tienePruebas = false): string =>
 export const textoContinuar = (hechos: number, total: number, siguiente: string): string =>
   `Piloto: sigue con el paso ${hechos + 1} de ${total}: ${recortar(siguiente, 160)}. Reparte con el equipo lo que sea pesado y marca el paso al terminar.`
 
-export const TEXTO_PLAN = 'Piloto: antes de seguir, haz el plan con TodoWrite (3 a 8 pasos con su criterio de "terminado") y empieza por el primero.'
+export const TEXTO_PLAN = 'Piloto: antes de seguir, haz el plan con TodoWrite (3 a 8 pasos con su criterio de "terminado"; si no tienes TodoWrite, como lista "- [ ] paso") y empieza por el primero.'
 export const MAX_RONDAS = 2
 export const TEXTO_CORREGIR = (ronda: number): string =>
   `Piloto: el revisor encontró problemas (ronda ${ronda} de ${MAX_RONDAS}). Corrígelos uno por uno, comprueba que cada arreglo funciona y vuelve a pasar equipo:revisor.`
 export const TEXTO_REVISION = 'Piloto: todos los pasos están hechos. Antes de darlo por terminado comprueba que funciona de verdad (corre las pruebas o la compilación, o abre y mira el resultado) y pasa equipo:revisor sobre todo lo cambiado. Su respuesta tiene que ser TODO BIEN; si no, corrige.'
+
+/** El plan escrito como lista con casillas ("- [ ] paso", "- [x] paso") cuando no hay TodoWrite; si un paso sale dos veces, manda la última. */
+export const planDeTexto = (texto: string): Paso[] => {
+  const pasos = new Map<string, boolean>()
+  for (const m of texto.matchAll(/^\s*[-*]\s+\[([ xX])\]\s+(.+)$/gm)) pasos.set((m[2] ?? '').trim(), m[1] !== ' ')
+
+  return [...pasos].map(([texto, hecho]) => ({ texto, hecho }))
+}
+
+/** Junta el plan anterior con la lista nueva: lo que no se repite conserva su estado, lo repetido toma la marca nueva. */
+export const unirPlan = (antes: readonly Paso[], ahora: readonly Paso[]): Paso[] => {
+  const pasos = new Map(antes.map(p => [p.texto, p.hecho]))
+  for (const p of ahora) pasos.set(p.texto, p.hecho)
+
+  return [...pasos].map(([texto, hecho]) => ({ texto, hecho }))
+}
 
 export const resumenPlan = (pasos: readonly Paso[]): { hechos: number; total: number; siguiente: string | null } => ({
   hechos: pasos.filter(p => p.hecho).length,
