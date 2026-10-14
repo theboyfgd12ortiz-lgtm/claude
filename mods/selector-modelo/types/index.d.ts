@@ -33,6 +33,20 @@ export type Uso = Record<Familia, Consumo>
 /** 'auto' o un nivel fijo del 1 al 9. */
 export type Modo = 'auto' | number
 
+export type Nivel = 'normal' | 'ahorro' | 'critico'
+
+export type Estado = {
+  nivel: Nivel
+  /** Uso de la semana y de las 5 horas, 0-100; null si el plan no informa límites. */
+  semana: number | null
+  cincoHoras: number | null
+  renuevaSemana: string | null
+  /** El nivel más alto que se permite ahora; null mientras no hay límite. */
+  topeMax: number | null
+}
+
+export type CoachStats = { codeTurns: number; verifiedTurns: number; lastWarning: string | null }
+
 declare module 'claude-code' {
   interface PluginState {
     'selector-modelo': {
@@ -42,6 +56,11 @@ declare module 'claude-code' {
       historial: Decision[]
       uso: Uso
       clasificador: { consultas: number; tokens: number }
+      presupuesto: Estado
+      presupuestoAuto: boolean
+      mejorarAuto: boolean
+      avisados: number
+      calidad: CoachStats
     }
   }
 }

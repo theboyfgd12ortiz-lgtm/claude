@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Instala o actualiza TODO: los mods de este repo, rtk y los plugins de terceros
-# (caveman, humanizer, ponytail, token-optimizer). Sirve igual en tu PC (Linux/macOS/WSL) y como "setup script"
+# (caveman, humanizer, token-optimizer). Sirve igual en tu PC (Linux/macOS/WSL) y como "setup script"
 # de un entorno en la nube. Es idempotente: correrlo de nuevo trae lo nuevo.
 #
 # Variables opcionales:
 #   CLAUDE_MODS_REPO=dueño/repo   otro repositorio con los mods
 #   RTK_VERSION=v0.49.0           versión de rtk (probada); súbela cuando quieras actualizarlo
-#   SKIP_RTK=1, SKIP_CAVEMAN=1, SKIP_HUMANIZER=1, SKIP_PONYTAIL=1, SKIP_TOKEN_OPTIMIZER=1
 #                                 no instalar esa parte
 #   WITH_HEADROOM=1               instalar también headroom (solo tiene sentido en tu PC)
 set -uo pipefail
@@ -50,7 +49,6 @@ for p in $PLUGINS; do install_or_update "${p}@${MARKET}"; done
 # --- 2. Plugins de terceros, desde su repositorio original ------------------
 #   caveman          respuestas sin relleno (Apache-2.0, necesita Node)
 #   humanizer        reescribe textos para que no suenen a IA (MIT)
-#   ponytail         la solución más simple que funcione (MIT, necesita Node)
 #   token-optimizer  audita y vigila el gasto de contexto (PolyForm Noncommercial, necesita Python 3)
 add_marketplace() { # $1 = nombre, $2 = dueño/repo
   if claude plugin marketplace list 2>/dev/null | grep -q "$1"; then
@@ -72,7 +70,6 @@ third_party() { # $1 = variable SKIP, $2 = programa que necesita, $3 = marketpla
 PY=$(command -v python3 || command -v python || true)
 third_party SKIP_CAVEMAN node caveman JuliusBrussee/caveman caveman@caveman
 third_party SKIP_HUMANIZER "" humanizer blader/humanizer humanizer@humanizer
-third_party SKIP_PONYTAIL node ponytail DietrichGebert/ponytail ponytail@ponytail
 third_party SKIP_TOKEN_OPTIMIZER "${PY:-python3}" alexgreensh-token-optimizer alexgreensh/token-optimizer token-optimizer@alexgreensh-token-optimizer
 
 # token-optimizer trae su propio recorte de comandos de Bash; rtk ya hace eso (y lo medimos),
@@ -102,7 +99,7 @@ if [ -f "$KNOWN" ]; then
 import json, sys
 path = sys.argv[1]
 data = json.load(open(path))
-for name in ("claude-mods", "caveman", "humanizer", "ponytail", "alexgreensh-token-optimizer"):
+for name in ("claude-mods", "caveman", "humanizer", "alexgreensh-token-optimizer"):
     if name in data:
         data[name]["autoUpdate"] = True
 json.dump(data, open(path, "w"), indent=2)
@@ -110,7 +107,7 @@ PYEOF
   elif command -v node >/dev/null 2>&1; then
     node -e '
       const fs = require("fs"), p = process.argv[1], d = JSON.parse(fs.readFileSync(p, "utf8"));
-      for (const n of ["claude-mods", "caveman", "humanizer", "ponytail", "alexgreensh-token-optimizer"]) if (d[n]) d[n].autoUpdate = true;
+      for (const n of ["claude-mods", "caveman", "humanizer", "alexgreensh-token-optimizer"]) if (d[n]) d[n].autoUpdate = true;
       fs.writeFileSync(p, JSON.stringify(d, null, 2));
     ' "$KNOWN" || warn "no pude activar la actualización automática"
   fi

@@ -1,6 +1,0 @@
-{
-  "name": "presupuesto",
-  "description": "Cuida tu límite de uso: cuando la semana o las 5 horas se llenan, baja solo el tope del selector y pide respuestas más económicas; al renovarse, lo devuelve.",
-  "author": { "name": "theboyfgd12ortiz-lgtm" },
-  "types": "./types/index.d.ts"
-}

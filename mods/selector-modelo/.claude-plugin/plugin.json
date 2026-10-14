@@ -1,12 +1,8 @@
 {
   "name": "selector-modelo",
-  "description": "Elige solo el modelo y el esfuerzo de cada petición (9 niveles, de Haiku a Opus) para gastar lo justo; /nivel para verlo o fijarlo.",
+  "description": "El director: elige modelo y esfuerzo por pedido, cuida tu límite de uso, pide un plan o pregunta lo esencial cuando el pedido lo necesita, trae las reglas de trabajo (directo, sin relleno, verifica) y avisa si se cambió código sin comprobarlo.",
   "author": {
     "name": "theboyfgd12ortiz-lgtm"
   },
-  "types": "./types/index.d.ts",
-  "dependencies": [
-    "presupuesto",
-    "equipo"
-  ]
+  "types": "./types/index.d.ts"
 }

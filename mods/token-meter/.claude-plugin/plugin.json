@@ -1,8 +1,0 @@
-{
-  "name": "token-meter",
-  "description": "Shows each turn's tokens, cache hits, time and tool calls above the prompt, with session totals in /tokens.",
-  "author": {
-    "name": "theboyfgd12ortiz-lgtm"
-  },
-  "types": "./types/index.d.ts"
-}

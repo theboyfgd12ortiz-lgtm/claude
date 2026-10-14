@@ -1,13 +1,13 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { duracion, estaAgotado, faltaPara, nivelDe } from './reglas'
+import { duracion, estaAgotado, faltaPara, nivelDe } from '../hooks/presupuesto'
 
 /** A stand-in for another mod: it reads the ceiling the way selector-modelo does and reports it. */
 const lector = {
   name: 'lector',
   register: (on: (...a: unknown[]) => unknown) => {
     on('command.run', { command: 'tope' }, async ($: { state: { get: (r: unknown) => Promise<{ value?: { topeMax: number | null } }> } }) => {
-      const { value } = await $.state.get({ plugin: 'presupuesto', key: 'estado' })
+      const { value } = await $.state.get({ plugin: 'selector-modelo', key: 'presupuesto' })
 
       return { text: String(value?.topeMax) }
     })

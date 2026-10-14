@@ -10,9 +10,10 @@ import {
   NIVEL_PILOTO,
   peldano,
   puntosANivel,
-  pideUnPlan,
+
   techoEfectivo,
 } from '../hooks/register'
+import { notaDelPedido } from '../hooks/reglas'
 
 const nivel = (args: string) => ({
   command: 'nivel',
@@ -185,12 +186,17 @@ test('el presupuesto puede bajar el tope, nunca subirlo', async () => {
   expect(techoEfectivo(9, undefined)).toBe(9)
 })
 
-test('las tareas grandes piden un plan visible, las pequeñas no', async () => {
-  expect(pideUnPlan(null)).toBe(false)
-  expect(pideUnPlan(CERO)).toBe(false)
-  expect(pideUnPlan(PAGINA)).toBe(true)
-  expect(pideUnPlan({ ...CERO, alcance: 1, razonamiento: 1 })).toBe(false)
-  expect(pideUnPlan({ ...CERO, alcance: 1, riesgo: 3 })).toBe(true)
+test('una sola nota por pedido: pregunta si es vago, plan si es grande, nada si es pequeño', async () => {
+  expect(notaDelPedido(null)).toBeUndefined()
+  expect(notaDelPedido(CERO)).toBeUndefined()
+  expect(notaDelPedido({ ...CERO, alcance: 1, razonamiento: 1 })).toBeUndefined()
+  const grande = notaDelPedido({ ...CERO, alcance: 2, dudas: 0 }) ?? ''
+  expect(grande).toMatch(/plan/)
+  expect(grande).not.toMatch(/preguntas/)
+  const vago = notaDelPedido(PAGINA) ?? ''
+  expect(vago).toMatch(/3 preguntas/)
+  expect(vago).toMatch(/plan/)
+  expect(notaDelPedido({ ...CERO, alcance: 1, riesgo: 3 })).toMatch(/plan/)
 })
 
 test('con la caché caliente no se cambia de modelo ni de esfuerzo por un escalón; con la fría sí, y subir mucho siempre', () => {

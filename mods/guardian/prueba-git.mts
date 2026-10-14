@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, mkdtemp
 import { tmpdir } from 'node:os'
 import { crearPunto, cambiosDesde, restaurar, podar } from './hooks/git.ts'
 
-const cwd = mkdtempSync(tmpdir() + '/respaldo-')
+const cwd = mkdtempSync(tmpdir() + '/guardian-')
 const env = { ...process.env, GIT_AUTHOR_NAME: 'x', GIT_AUTHOR_EMAIL: 'x@x', GIT_COMMITTER_NAME: 'x', GIT_COMMITTER_EMAIL: 'x@x' }
 const run = async (argv: string[]) => {
   try { return { code: 0, out: execFileSync(argv[0]!, argv.slice(1), { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) } }

@@ -1,89 +1,44 @@
 {
   "name": "claude-mods",
-  "description": "Mods para Claude Code: seguridad, ahorro de tokens y mejores resultados.",
+  "description": "Mods para Claude Code: el director (modelo, límite, reglas), el equipo de agentes, seguridad, memoria y un panel.",
   "owner": {
     "name": "theboyfgd12ortiz-lgtm"
   },
   "plugins": [
     {
-      "name": "selector-modelo",
-      "source": "./mods/selector-modelo",
-      "description": "Elige solo el modelo y esfuerzo de cada petición (Haiku → Sonnet → Opus) para gastar lo justo."
-    },
-    {
-      "name": "rtk-hook",
-      "source": "./mods/rtk-hook",
-      "description": "Reescribe los comandos de Bash para que pasen por rtk y devuelvan menos texto (usa el programa rtk, Apache-2.0)."
+      "name": "equipo",
+      "source": "./mods/equipo",
+      "description": "Un director reparte el trabajo pesado a agentes baratos (explorador, obrero, arreglador, revisor) y, con /piloto, lleva un objetivo de principio a fin: plan, pasos, revisión y resumen."
     },
     {
       "name": "guardian",
       "source": "./mods/guardian",
-      "description": "Bloquea comandos destructivos y lecturas de secretos antes de que se ejecuten."
-    },
-    {
-      "name": "output-trim",
-      "source": "./mods/output-trim",
-      "description": "Ahorra tokens recortando salidas enormes de Bash a inicio + final."
-    },
-    {
-      "name": "quality-coach",
-      "source": "./mods/quality-coach",
-      "description": "Reglas de trabajo, aviso de código sin verificar y mejores resúmenes al compactar."
-    },
-    {
-      "name": "token-meter",
-      "source": "./mods/token-meter",
-      "description": "Muestra tokens, caché, tiempo y herramientas de cada turno; /tokens para el total."
-    },
-    {
-      "name": "presupuesto",
-      "source": "./mods/presupuesto",
-      "description": "Cuida tu límite de uso: con la semana casi llena baja el modelo y pide respuestas económicas."
-    },
-    {
-      "name": "traspaso",
-      "source": "./mods/traspaso",
-      "description": "/guardar y /retomar: sigue un trabajo largo en una conversación limpia sin perder nada."
-    },
-    {
-      "name": "mejorar-prompt",
-      "source": "./mods/mejorar-prompt",
-      "description": "/mejorar convierte un pedido vago en uno claro antes de enviarlo."
-    },
-    {
-      "name": "respaldo",
-      "source": "./mods/respaldo",
-      "description": "Un punto de restauración antes de cada pedido, con botón Deshacer (usa git sin tocar tus ramas)."
-    },
-    {
-      "name": "web",
-      "source": "./mods/web",
-      "description": "Revisa páginas web en palabras simples, avisa si GitHub/Netlify/Supabase/Claude están caídos y revisa solo tu sitio al publicarlo."
+      "description": "Bloquea comandos destructivos y claves en el código, y guarda un punto de restauración antes de cada pedido."
     },
     {
       "name": "memoria",
       "source": "./mods/memoria",
-      "description": "Claude recuerda tu proyecto entre conversaciones: apunta solo lo importante y lo lee al empezar."
+      "description": "Recuerda el proyecto y guarda solo el progreso cuando la charla se llena."
     },
     {
       "name": "mods-panel",
       "source": "./mods/mods-panel",
-      "description": "Panel /mods: explica cada mod en español y muestra su estado en vivo."
+      "description": "Panel (/mods) que explica en español qué hace cada uno de los 6 mods (selector-modelo, equipo, guardian, memoria, web y este panel) y muestra su estado en vivo."
     },
     {
-      "name": "equipo",
-      "source": "./mods/equipo",
-      "description": "Equipo de agentes: reparte el trabajo pesado a Haiku y Sonnet para gastar menos, y /investigar busca en internet con un agente barato."
+      "name": "rtk-hook",
+      "source": "./mods/rtk-hook",
+      "description": "Ahorra tokens: reescribe los comandos de Bash (git, ls, grep, tests...) para que pasen por rtk, que recorta su salida. Si rtk no está instalado, no hace nada."
     },
     {
-      "name": "terminales",
-      "source": "./mods/terminales",
-      "description": "Varias terminales de Claude Code en el mismo proyecto: se ven, se mandan mensajes, no se pisan los archivos y puedes abrir una copia en paralelo."
+      "name": "selector-modelo",
+      "source": "./mods/selector-modelo",
+      "description": "El director: elige modelo y esfuerzo por pedido, cuida tu límite de uso, pide un plan o pregunta lo esencial cuando el pedido lo necesita, trae las reglas de trabajo (directo, sin relleno, verifica) y avisa si se cambió código sin comprobarlo."
     },
     {
-      "name": "piloto",
-      "source": "./mods/piloto",
-      "description": "Le dices qué quieres lograr y se planea, reparte con el equipo, ejecuta y revisa solo, con tope de pasos y freno de presupuesto."
+      "name": "web",
+      "source": "./mods/web",
+      "description": "Revisa páginas web (la de tu cliente, tu sitio recién publicado) y te dice en palabras simples qué falta; avisa si GitHub, Netlify, Supabase o Claude están caídos; y revisa solo el sitio cada vez que lo publicas."
     }
   ]
 }

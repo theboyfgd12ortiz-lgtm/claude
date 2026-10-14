@@ -31,7 +31,7 @@ test('lee las notas al empezar y las pone en el prompt; después de trabajar las
   const reloj = mock.clock(on)
   mock.store(on)
   const archivos = new Map<string, string>([['.claude/memoria.md', '<!-- memoria 2026-10-01T00:00:00.000Z -->\n\n- Sitio de Panadería Sol, estático\n']])
-  const quitar = (r: string) => r.replace(/^.*?(\.claude\/memoria\.md)$/, '$1')
+  const quitar = (r: string) => r.replaceAll('\\', '/').replace(/^.*?(\.claude\/memoria\.md)$/, '$1')
   on('fs.read', ((_$: unknown, e: { path: string }) => {
     const t = archivos.get(quitar(e.path))
     if (t === undefined) throw new Error('no existe')

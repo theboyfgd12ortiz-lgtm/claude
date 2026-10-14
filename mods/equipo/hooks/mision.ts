@@ -1,4 +1,4 @@
-// Las reglas del piloto: sin `$`, para probarlas directamente.
+// Las reglas de la misión (piloto): sin `$`, para probarlas directamente.
 
 import type { Paso } from '../types'
 
@@ -6,13 +6,17 @@ import type { Paso } from '../types'
 export const MAX_CONTINUACIONES = 8
 
 const ENVOLTURAS = /<(system-reminder|local-command-caveat|local-command-stdout|local-command-stderr|command-name|command-message|command-args)>[\s\S]*?<\/\1>/g
+
+/** Quita los envoltorios que el sistema pega al mensaje (system-reminder, comandos locales) para quedarse con lo que escribió la persona. */
+export const limpiarEnvoltorios = (texto: string): string => texto.replace(ENVOLTURAS, '').trim()
+
 /** Pedidos de crear algo que casi siempre son trabajo grande aunque se escriban en una línea. */
 const CREAR = /\b(haz(me)?|crea(me|r)?|constru\w+|desarroll\w+|mont\w+|genera(me|r)?|dise[ñn]a(me|r)?)\b[^.\n]{0,40}\b(p[aá]gina|sitio|web|landing|tienda|app|aplicaci[oó]n|sistema|dashboard|panel|bot|api|plataforma|portafolio|blog|cat[aá]logo|juego)\b/i
 const PALABRAS_GRANDES = /\b(refactor\w*|migra\w*|reescrib\w*|rediseñ\w*|arquitectura|sistema completo|app completa|aplicaci[oó]n completa|todo el proyecto|de punta a punta|end[- ]to[- ]end|varios (archivos|m[oó]dulos|pasos)|desde cero|implementa\w* (un|una|el|la) \w+ (completo|completa)|p[aá]gina (web )?completa|sitio (web )?completo)\b/i
 
 /** Si el pedido parece un trabajo grande: largo, con varias partes, o que lo dice con sus palabras. */
 export const esTareaGrande = (texto: string): boolean => {
-  const t = texto.replace(ENVOLTURAS, '').trim()
+  const t = limpiarEnvoltorios(texto)
   if (t.startsWith('/')) return false
   const partes = t.split('\n').filter(l => /^\s*(?:[-*•]|\d+[.)])\s+\S/.test(l)).length
 
@@ -41,7 +45,7 @@ export const recortar = (texto: string, n: number): string => {
  * Sigue el método de Everything Claude Code: plan, pruebas primero, revisión con contexto limpio, verificar, apuntar lo aprendido.
  */
 export const protocolo = (objetivo: string, tienePruebas = false): string =>
-  `<piloto>Misión: ${recortar(objetivo, 400)}. Trabaja de principio a fin sin pedirme confirmaciones, salvo que algo bloquee de verdad (si dudas, elige lo razonable y dilo en una línea). ` +
+  `<piloto>Misión: ${recortar(limpiarEnvoltorios(objetivo), 400)}. Si falta algo que cambie mucho el resultado, pregunta antes de empezar; si no, sigue sin pedirme confirmaciones. ` +
   '1) Haz el plan con TodoWrite: 3 a 8 pasos, cada uno con su criterio de "terminado". ' +
   '2) Ejecuta paso a paso como director: lo pesado de leer, buscar o hacer repártelo con el equipo (equipo:explorador, equipo:obrero, equipo:investigador), con "dificultad: baja|media|alta" en cada encargo; lo pequeño hazlo tú. Marca cada paso al terminarlo. ' +
   (tienePruebas

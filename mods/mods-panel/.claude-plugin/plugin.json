@@ -1,24 +1,8 @@
 {
   "name": "mods-panel",
-  "description": "Un panel (/mods) que explica en español qué hace cada mod y muestra su estado en vivo.",
+  "description": "Panel (/mods) que explica en español qué hace cada uno de los 6 mods (selector-modelo, equipo, guardian, memoria, web y este panel) y muestra su estado en vivo.",
   "author": {
     "name": "theboyfgd12ortiz-lgtm"
   },
-  "dependencies": [
-    "guardian",
-    "output-trim",
-    "quality-coach",
-    "token-meter",
-    "selector-modelo",
-    "presupuesto",
-    "traspaso",
-    "mejorar-prompt",
-    "respaldo",
-    "web",
-    "memoria",
-    "equipo",
-    "terminales",
-    "piloto"
-  ],
   "types": "./types/index.d.ts"
 }

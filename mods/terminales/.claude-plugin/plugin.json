@@ -1,6 +1,0 @@
-{
-  "name": "terminales",
-  "description": "Varias terminales de Claude Code en el mismo proyecto que se conocen: ven qué hace cada una, se mandan mensajes, no se pisan los archivos y puedes abrir una en paralelo con su propia copia del proyecto.",
-  "author": { "name": "theboyfgd12ortiz-lgtm" },
-  "types": "./types/index.d.ts"
-}

@@ -6,11 +6,11 @@ export type PanelExtras = {
   rtk: RtkInfo | null
   /** rtk's saved-token counter when the session started, to show this session's share. */
   rtkAtStart: number | null
-  /** Plugins, by name, that have at least one command or skill loaded (caveman, ponytail...). */
+  /** Plugins, by name, that have at least one command or skill loaded (caveman, humanizer...). */
   plugins: string[]
 }
 
-export type Tab = 'ahora' | 'cambios' | 'ahorro' | 'modelo' | 'equipo' | 'terminales' | 'web' | 'mods' | 'ayuda'
+export type Tab = 'ahora' | 'cambios' | 'ahorro' | 'modelo' | 'equipo' | 'web' | 'mods' | 'ayuda'
 
 export type Tone = 'info' | 'ok' | 'warn' | 'bad'
 

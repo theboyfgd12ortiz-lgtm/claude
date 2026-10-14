@@ -1,7 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Decision, Familia, Modo, Origen, Puntos, Uso } from '../types'
+import type { CoachStats, Decision, Estado, Familia, Modo, Origen, Puntos, Uso } from '../types'
+import { COMPACT_HINT, isCodeFile, isVerification, runsEdited } from './calidad'
+import { duracion, estaAgotado, ETIQUETA, faltaPara, INSTRUCCIONES, LIMITE_SKILLS, nivelDe, SKILLS_POR_PEDIDO, TOPE } from './presupuesto'
+import { COMPACTAR, limpiarRespuesta, notaDelPedido, REGLAS, SISTEMA_MEJORAR } from './reglas'
 
 type Esfuerzo = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 type Peldano = {
@@ -71,6 +74,17 @@ const uso = atom({ plugin: 'selector-modelo', key: 'uso' } as const, {
   opus: { llamadas: 0, entrada: 0, salida: 0 },
 })
 const clasificador = atom({ plugin: 'selector-modelo', key: 'clasificador' } as const, { consultas: 0, tokens: 0 })
+const SIN_LIMITE: Estado = { nivel: 'normal', semana: null, cincoHoras: null, renuevaSemana: null, topeMax: null }
+const presupuesto = atom({ plugin: 'selector-modelo', key: 'presupuesto' } as const, SIN_LIMITE)
+const presupuestoAuto = atom({ plugin: 'selector-modelo', key: 'presupuestoAuto' } as const, true)
+const mejorarAuto = atom({ plugin: 'selector-modelo', key: 'mejorarAuto' } as const, true)
+const avisados = atom({ plugin: 'selector-modelo', key: 'avisados' } as const, 0)
+const SIN_STATS: CoachStats = { codeTurns: 0, verifiedTurns: 0, lastWarning: null }
+const calidad = atom({ plugin: 'selector-modelo', key: 'calidad' } as const, SIN_STATS)
+
+// Skills cargadas desde el último mensaje de la persona, y el aviso de "ya puedes seguir" (uno solo a la vez).
+let skillsEnPedido = 0
+let avisoRenovacion: { cancel: () => void } | undefined
 
 const CLASIFICADOR = `Eres el clasificador de dificultad de un agente de programación. Lees la petición del usuario y la puntúas. Devuelve SOLO un JSON en una línea, sin nada más:
 {"alcance":0,"razonamiento":0,"riesgo":0,"dudas":0,"calidad":0,"tema_nuevo":false,"motivo":"máximo 8 palabras"}
@@ -95,27 +109,62 @@ export function techoEfectivo(tope: number, topePresupuesto: number | null | und
 }
 
 async function techoAhora($: EngineInterface): Promise<number> {
-  const presupuesto = await $.state.get({ plugin: 'presupuesto', key: 'estado' } as const).catch(() => undefined)
+  return techoEfectivo(await read($, tope), (await read($, presupuesto)).topeMax)
+}
 
-  return techoEfectivo(await read($, tope), presupuesto?.value?.topeMax)
+/** Lee los límites del plan, fija el nivel de ahorro y su tope; el selector lo respeta en cada llamada. */
+async function revisar($: EngineInterface) {
+  const uso = await $.session.usage().catch(() => null)
+  if (uso === null) return
+  const semana = uso.rateLimits.find(r => r.kind === 'seven_day')
+  const cinco = uso.rateLimits.find(r => r.kind === 'five_hour')
+  const antes = await read($, presupuesto)
+  const activo = await read($, presupuestoAuto)
+  const nivelAhorro = activo ? nivelDe(semana?.percentUsed ?? null, cinco?.percentUsed ?? null) : 'normal'
+
+  if (nivelAhorro !== antes.nivel && (nivelAhorro !== 'normal' || antes.semana !== null)) {
+    $.ui.toast(
+      nivelAhorro === 'normal'
+        ? 'Presupuesto: tu límite se renovó, vuelvo al modo normal.'
+        : `Presupuesto: ${ETIQUETA[nivelAhorro]} (semana ${Math.round(semana?.percentUsed ?? 0)}%). Modelo limitado al nivel ${TOPE[nivelAhorro]}.`,
+    )
+  }
+
+  // Límite agotado: se dice cuándo vuelve y se avisa solo cuando ya se puede seguir.
+  const agotado = activo && estaAgotado(cinco?.percentUsed ?? null, semana?.percentUsed ?? null)
+  if (agotado && avisoRenovacion === undefined) {
+    const cuando = (cinco?.percentUsed ?? 0) >= 100 ? cinco?.resetsAt : semana?.resetsAt
+    const falta = faltaPara(cuando, await $.clock.now())
+    if (falta !== null) {
+      $.ui.toast(`Presupuesto: se acabó el límite. Vuelve en ${duracion(falta)}; te aviso cuando puedas seguir.`)
+      avisoRenovacion = $.clock.after(falta + 30_000, () => {
+        avisoRenovacion = undefined
+        void $.ui.notify('Tu límite de uso se renovó: ya puedes seguir. Escribe /retomar para continuar donde quedaste.', { title: 'Claude Code' }).catch(() => undefined)
+        void revisar($)
+      })
+    }
+  } else if (!agotado && avisoRenovacion !== undefined) {
+    avisoRenovacion.cancel()
+    avisoRenovacion = undefined
+  }
+
+  await update($, presupuesto, () => ({
+    nivel: nivelAhorro,
+    semana: semana?.percentUsed ?? null,
+    cincoHoras: cinco?.percentUsed ?? null,
+    renuevaSemana: semana?.resetsAt ?? null,
+    topeMax: TOPE[nivelAhorro],
+  }))
 }
 
 /** El escalón mínimo del director mientras el piloto lleva una misión: planear, integrar y revisar con calidad; los agentes baratos hacen lo pesado. */
 export const NIVEL_PILOTO = 6
 
-/** Si el piloto tiene una misión en marcha (lee su estado; sin el mod, nunca). */
+/** Si el equipo tiene una misión en marcha (lee su estado; sin el mod, nunca). */
 async function misionActiva($: EngineInterface): Promise<boolean> {
-  const r = await $.state.get({ plugin: 'piloto', key: 'mision' } as never).catch(() => undefined)
+  const r = await $.state.get({ plugin: 'equipo', key: 'mision' } as never).catch(() => undefined)
 
   return (r as { value?: { activa?: boolean } } | undefined)?.value?.activa === true
-}
-
-/** Lo que Claude lee junto a una tarea grande: empezar con un plan visible, no con el código. */
-export const AVISO_PLAN = `Esta es una tarea grande. Empieza con un plan corto de 3 a 7 pasos usando la herramienta de lista de tareas (TodoWrite), con el paso actual marcado en curso, y ve marcándolos como hechos al terminarlos. Así el usuario ve el avance. No escribas el plan como texto aparte. Si algo del pedido es ambiguo y cambia mucho el resultado, pregunta antes de empezar.`
-
-/** ¿Merece la pena un plan visible? Tareas de varias partes, o con riesgo, no los pedidos pequeños. */
-export function pideUnPlan(p: Puntos | null): boolean {
-  return p !== null && (p.alcance >= 2 || (p.alcance >= 1 && p.riesgo >= 2))
 }
 
 export function limitar(n: number, minimo: number, maximo: number): number {
@@ -326,6 +375,9 @@ export const register: Register = on => {
   let errores = 0
   let mensajes = 0
   let contexto = 0
+  // Lo que el turno cambió y si se comprobó.
+  let editados = new Set<string>()
+  let verificaciones = 0
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -333,8 +385,16 @@ export const register: Register = on => {
       description: 'Selector de modelo: abre el panel, o auto, 1-9, tope N',
       argumentHint: '[auto | 1-9 | tope N]',
     })
+    await $.command.register({ name: 'presupuesto', description: 'Cuida tu límite de uso: /presupuesto (estado) · on · off', argumentHint: 'on | off' })
+    await $.command.register({
+      name: 'mejorar',
+      description: 'Mejora el pedido que escribiste (o el que pongas aquí) y lo deja en el cuadro para revisar',
+      argumentHint: '[tu pedido]',
+    })
     const guardado = Number(await $.store.get('tope'))
     if (Number.isFinite(guardado) && guardado >= 1) await update($, tope, () => limitar(guardado, 1, NIVEL_MAX))
+    if ((await $.store.get('presupuestoAuto').catch(() => undefined)) === false) await update($, presupuestoAuto, () => false)
+    void revisar($)
     const r = await next(e)
     await mostrar($)
     // Con el Centro de control instalado, este panel sobra: si la app lo dejó abierto, se cierra.
@@ -364,6 +424,31 @@ export const register: Register = on => {
     }
   })
 
+  on('command.run', { command: 'presupuesto' }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    if (arg === 'off' || arg === 'on') {
+      await update($, presupuestoAuto, () => arg === 'on')
+      await $.store.set('presupuestoAuto', arg === 'on').catch(() => undefined)
+    }
+    await revisar($)
+    const x = await read($, presupuesto)
+    const pct = (n: number | null) => (n === null ? 'sin dato' : `${Math.round(n)}%`)
+
+    return { text: `Presupuesto ${(await read($, presupuestoAuto)) ? 'activo' : 'apagado'} · ${ETIQUETA[x.nivel]} · semana ${pct(x.semana)} · 5 horas ${pct(x.cincoHoras)}` }
+  })
+
+  on('command.run', { command: 'mejorar' }, async ($, e) => {
+    const arg = e.args.trim()
+    // Sin texto después del comando se usa el borrador que ya escribiste en el cuadro.
+    const pedido = arg !== '' ? arg : (await $.prompt.read().catch(() => ({ text: '' }))).text.trim()
+    if (pedido === '') return { text: 'Escribe tu pedido en el cuadro de mensaje y pulsa "Mejorar mi borrador" (o /mejorar <pedido>).' }
+    const r = await $.model.complete({ model: 'claude-haiku-5-5', system: SISTEMA_MEJORAR, prompt: pedido.slice(0, 4000), maxTokens: 400, timeoutMs: 20000 })
+    if (!r.isAnswered || r.text.trim() === '') return { text: 'No pude mejorarlo ahora; envía tu pedido tal cual.' }
+    await $.prompt.fill({ text: limpiarRespuesta(r.text) })
+
+    return { text: 'Pedido mejorado en el cuadro de mensaje: revísalo, cámbialo si quieres y pulsa Enter.' }
+  })
+
   on('prompt.submit', async ($, e, next) => {
     // La app de escritorio pega avisos <system-reminder> al mensaje: se quitan antes de clasificar.
     const texto = limpiarTexto(e.text)
@@ -375,6 +460,7 @@ export const register: Register = on => {
       (origenPedido.kind === 'plugin' && origenPedido.asUser === true)
     // Avisos, tareas programadas y mensajes de otras sesiones siguen con el nivel que haya.
     if (!esDeLaPersona || texto === '' || texto.startsWith('/')) return next(e)
+    skillsEnPedido = 0
 
     // Con la ventana muy llena, compactar antes de seguir: cada paso relee todo el contexto.
     if (!e.turnId) {
@@ -458,12 +544,77 @@ export const register: Register = on => {
 
     // Tarea grande: Claude empieza con un plan visible en el Centro de control (la persona no lo pide).
     // Con el piloto en marcha el plan ya lo pide él: no se repite (y no se contradice con "pregunta antes de empezar").
-    return pideUnPlan(puntos) && !(await misionActiva($)) ? next({ ...e, context: [...(e.context ?? []), AVISO_PLAN] }) : next(e)
+    // Una sola nota por pedido (con una misión en marcha el orquestador ya pidió el plan) más, si toca, la de ahorro.
+    const notas: string[] = []
+    const nota = (await misionActiva($)) ? undefined : notaDelPedido(puntos)
+    if (nota !== undefined && (await read($, mejorarAuto))) {
+      notas.push(nota)
+      await update($, avisados, n => n + 1)
+    }
+    const ahorro = (await read($, presupuestoAuto)) ? INSTRUCCIONES[(await read($, presupuesto)).nivel] : null
+    if (ahorro !== null) notas.push(`<presupuesto>${ahorro}</presupuesto>`)
+
+    return next(notas.length === 0 ? e : { ...e, context: [...(e.context ?? []), ...notas] })
   }).catch(($, e, next) => next(e))
 
+  // Con poco límite se puede usar una skill por pedido (las que ayudan a la calidad); la segunda se rechaza.
+  on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
+    if ((await read($, presupuesto)).nivel === 'normal' || !(await read($, presupuestoAuto))) return next(e)
+    if (skillsEnPedido >= SKILLS_POR_PEDIDO) return { deny: LIMITE_SKILLS }
+    skillsEnPedido += 1
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // Qué cambió el turno y si se comprobó.
+  on('turn.start', ($, e, next) => {
+    editados = new Set()
+    verificaciones = 0
+
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId !== undefined) return done
+    void revisar($)
+    if (e.reason !== 'answer' || editados.size === 0) return done
+    const comprobado = verificaciones > 0
+    const nombres = [...editados].map(ruta => ruta.split(/[\\/]/).pop()).slice(0, 5).join(', ')
+    await update($, calidad, c => ({
+      codeTurns: c.codeTurns + 1,
+      verifiedTurns: c.verifiedTurns + (comprobado ? 1 : 0),
+      lastWarning: comprobado ? c.lastWarning : `${nombres}: cambiado sin tests, lint ni build`,
+    }))
+    if (!comprobado) {
+      $.ui.toast(`${editados.size} archivo(s) de código cambiados (${nombres}) sin tests, lint ni build`)
+      await $.session
+        .append({
+          message: {
+            type: 'user',
+            content: [{ type: 'text', text: `<calidad>El último turno cambió ${nombres} pero no corrió ninguna prueba, lint, typecheck ni build. Antes de seguir construyendo encima, compruébalo donde el proyecto lo permita, o di por qué no se puede.</calidad>` }],
+          },
+        })
+        .catch(() => undefined)
+    }
+
+    return done
+  }).catch(($, e, next) => next(e))
+
+  on('session.compact', ($, e, next) => next({ ...e, instructions: `${e.instructions === undefined ? '' : `${e.instructions}\n\n`}${COMPACTAR}\n${COMPACT_HINT}` })).catch(($, e, next) => next(e))
+
+  // Errores del hilo principal (para subir de modelo) y lo que se editó o comprobó (para avisar si falta comprobar).
   on('tool.call', async ($, e, next) => {
     const r = await next(e)
     if (!e.agentId && r.isError) errores += 1
+    if (r.deny !== undefined) return r
+    if (e.tool === 'Edit' || e.tool === 'Write') {
+      if (isCodeFile(e.file_path)) editados.add(e.file_path)
+    } else if (e.tool === 'NotebookEdit') {
+      editados.add(e.notebook_path)
+    } else if (e.tool === 'Bash' && (isVerification(e.command) || runsEdited(e.command, editados))) {
+      verificaciones += 1
+    }
 
     return r
   }).catch(($, e, next) => next(e))
@@ -513,7 +664,7 @@ export const register: Register = on => {
     return r
   })
 
-  // Instrucción fija para que, al dividir el trabajo, cada parte vaya al modelo justo.
+  // Un solo bloque de reglas, fijo para toda la sesión (cambiarlo a mitad tiraría la caché).
   on('prompt.compose', async ($, e, next) => {
     const r = await next(e)
 
@@ -521,25 +672,9 @@ export const register: Register = on => {
       sections: [
         ...r.sections,
         {
-          id: 'selector-modelo:ahorro',
+          id: 'selector-modelo:reglas',
           scope: 'session',
-          text: `# Hábitos para ahorrar tokens (siempre, sin que te lo pidan)
-Respuestas:
-- Responde corto y directo: la respuesta primero, sin saludos, resúmenes ni ofrecimientos al final. Código, rutas y errores siempre exactos.
-- A un saludo o pregunta simple, una o dos frases. No uses herramientas si no hacen falta.
-Leer y buscar:
-- Busca con Grep/Glob antes de abrir archivos; abre solo las líneas que necesitas (offset/limit). No vuelvas a leer un archivo que ya leíste o editaste.
-- Si existe graphify-out/, consúltalo antes de leer archivos.
-- Junta en una sola respuesta las llamadas que no dependen entre sí. Las salidas largas de Bash ya se recortan solas; no repitas un comando solo para ver más.
-- Edita con Edit (solo el trozo que cambia), no reescribas archivos enteros.
-Cuándo usar un subagente y cuándo no:
-- Hazlo tú mismo si es corto: pocos archivos, un cambio puntual, una respuesta.
-- Usa un subagente (equipo:explorador) cuando haya que barrer muchos archivos o leer salidas largas y solo necesites la conclusión. Para repartir trabajo grande sigue la guía "Equipo de trabajo".
-Cuándo usar un hook:
-- Si algo se repite igual cada vez (formatear, avisar, revisar un comando), propón un hook en settings.json con la skill update-config en vez de hacerlo a mano en cada turno.
-Contexto y caché:
-- No cambies de tema en la misma conversación: si el pedido nuevo no tiene nada que ver, recomienda /clear en una línea.
-- En trabajos largos guarda el avance en progreso.md para poder compactar o limpiar sin perder nada.`,
+          text: REGLAS,
         },
       ],
     }

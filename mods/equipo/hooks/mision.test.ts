@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { decidir, esTareaGrande, hayPruebasEnPackage, MAX_CONTINUACIONES, MAX_RONDAS, protocolo, resumenPlan, TEXTO_PLAN, TEXTO_REVISION } from './reglas'
+import { decidir, esTareaGrande, hayPruebasEnPackage, limpiarEnvoltorios, MAX_CONTINUACIONES, MAX_RONDAS, protocolo, resumenPlan, TEXTO_PLAN, TEXTO_REVISION } from './mision'
 
 const base = { activa: true, razon: 'answer', continuaciones: 0, max: MAX_CONTINUACIONES, total: 4, hechos: 1, siguiente: 'conectar el formulario', presupuesto: 'normal', repeticiones: 0, yaRevisado: false, veredicto: null as 'ok' | 'problemas' | null, rondas: 0, sinVeredicto: 0 }
 
@@ -70,6 +70,17 @@ test('cuenta los pasos del plan', () => {
   expect(protocolo('una tienda')).toMatch(/Misión: una tienda.*TodoWrite.*equipo:revisor/)
 })
 
+test('quita los envoltorios del sistema del objetivo, también dentro del protocolo', () => {
+  const sucio = '<system-reminder>basura</system-reminder>\n<command-name>/x</command-name>hazme una tienda\n<local-command-stdout>ruido</local-command-stdout>'
+  expect(limpiarEnvoltorios(sucio)).toBe('hazme una tienda')
+  expect(limpiarEnvoltorios('texto normal')).toBe('texto normal')
+  const t = protocolo(sucio)
+  expect(t).toMatch(/Misión: hazme una tienda\./)
+  expect(t).not.toMatch(/system-reminder|basura|local-command/)
+  expect(t).toMatch(/pregunta antes de empezar/)
+  expect(t).not.toMatch(/sin pedirme confirmaciones, salvo/)
+})
+
 type On = Parameters<NonNullable<Parameters<typeof test>[2]>>[1]
 
 const montar = (on: On) => {
@@ -90,14 +101,25 @@ const montar = (on: On) => {
   return { clock, enviados }
 }
 
+const SPAWN = { tool_use_id: 't1', prompt: 'revisa', description: 'revisar', subagentType: 'equipo:revisor', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false } as const
+
 const turno = (reason = 'answer') => ({ reason, answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't' }) as never
 const plan = (hechos: number) => ({ tool: 'TodoWrite', todos: ['a', 'b', 'c'].map((c, i) => ({ content: `paso ${c}`, status: i < hechos ? 'completed' : 'pending', activeForm: c })) }) as never
 
-test('un pedido grande arranca la misión solo, y tras cada turno sigue con el siguiente paso hasta revisar y terminar', async ($, on) => {
+const CMD = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as const
+
+test('un pedido grande arranca la misión solo (con piloto auto on), y tras cada turno sigue con el siguiente paso hasta revisar y terminar', async ($, on) => {
   const { clock, enviados } = montar(on)
+  on('agent.register', () => ({ value: { agent: 'x' } }) as never)
+  on('agent.spawn', (_$, e) => ({ model: e.model ?? 'opus', agentId: e.description }) as never)
   await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true, source: 'startup' } as never)
-  const entra = await $.prompt.submit({ text: 'hazme una página web completa para mi panadería', wait: false, origin: { kind: 'composer' } } as never)
+  // Sin piloto automático un pedido grande no arranca nada.
+  const sin = await $.prompt.submit({ text: 'hazme una página web completa para mi panadería', wait: false, origin: { kind: 'composer' } } as never)
+  expect((sin.context ?? []).join(' ')).not.toMatch(/Misión/)
+  await $.command.run({ command: 'piloto', args: 'auto on', ...CMD } as never)
+  const entra = await $.prompt.submit({ text: '<system-reminder>ruido</system-reminder>hazme una página web completa para mi panadería', wait: false, origin: { kind: 'composer' } } as never)
   expect((entra.context ?? []).join(' ')).toMatch(/Misión: hazme una página web completa/)
+  expect((entra.context ?? []).join(' ')).not.toMatch(/system-reminder|ruido/)
 
   await $.tool.call(plan(0))
   await $.turn.complete(turno())
@@ -115,6 +137,7 @@ test('un pedido grande arranca la misión solo, y tras cada turno sigue con el s
   expect(enviados.at(-1)).toMatch(/equipo:revisor/)
 
   // El revisor encuentra un problema: se corrige y se revisa de nuevo.
+  await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:revisor', description: 'r1' } as never)
   await $.turn.complete({ agentId: 'r1', reason: 'answer', answer: '- src/a.ts: falta validar vacío', durationMs: 1, isAborted: false, turnId: 'tr' } as never)
   await $.turn.complete(turno())
   await clock.advance(0)
@@ -122,20 +145,21 @@ test('un pedido grande arranca la misión solo, y tras cada turno sigue con el s
   await $.turn.complete(turno())
   await clock.advance(0)
   expect(enviados.at(-1)).toMatch(/equipo:revisor/)
+  await $.agent.spawn({ ...SPAWN, subagentType: 'equipo:revisor', description: 'r2' } as never)
   await $.turn.complete({ agentId: 'r2', reason: 'answer', answer: 'TODO BIEN', durationMs: 1, isAborted: false, turnId: 'tr2' } as never)
 
   const antes = enviados.length
   await $.turn.complete(turno())
   await clock.advance(0)
   expect(enviados.length).toBe(antes)
-  const estado = await $.command.run({ command: 'piloto', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as never)
+  const estado = await $.command.run({ command: 'piloto', args: '', ...CMD } as never)
   expect(estado.text).toMatch(/terminó: listo y revisado/)
 })
 
-test('un pedido corto no arranca nada y /piloto parar frena una misión', async ($, on) => {
+test('un pedido corto no arranca nada, aunque el piloto auto esté on, y /piloto parar frena una misión', async ($, on) => {
   const { clock, enviados } = montar(on)
-  const CMD = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as const
   await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true, source: 'startup' } as never)
+  await $.command.run({ command: 'piloto', args: 'auto on', ...CMD } as never)
   const corto = await $.prompt.submit({ text: 'cambia el título', wait: false, origin: { kind: 'composer' } } as never)
   expect(corto.context ?? []).toEqual([])
 

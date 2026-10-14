@@ -1,40 +1,41 @@
-<!-- traspaso 2026-10-11T19:11:59.527Z auto -->
+<!-- traspaso 2026-10-14T06:33:23.316Z auto -->
 
 ## Objetivo
-Mods de Claude Code para un usuario no técnico (Windows/PowerShell y nube): trabajo automático (sin recordar comandos), todo visible en un panel único ("Centro de control"), mínimo costo por tarea y calidad máxima como prioridad. Repo `theboyfgd12ortiz-lgtm/claude`, rama `claude/adoring-ride-khnvyf`.
+Ortiz no programa y quiere menos mods de Claude Code, pero más útiles. Pidió una auditoría sin piedad: quitar lo inútil y sumar anti-slop, un orquestador mejor, sequential-thinking, Context7, seguridad, segundo cerebro, prompt maestro automático, respuestas directas que no le den la razón y siempre un plan. También quería OpenCode como ayudante barato.
 
 ## Hecho
-- `mods/equipo/`: agentes Haiku/Sonnet, aprendizaje con escalada, ahorro neto, límites de agentes, dificultad por encargo, pizarra por terminal, `/investigar`, `/equipo probar`.
-- `mods/piloto/`: un objetivo y se planea, reparte, ejecuta y revisa solo. Revisión obligatoria (`TODO BIEN`, 2 rondas de corrección), tope de 8 continuaciones y frenos.
-- `mods/terminales/`: terminales T1/T2 que se ven y se mandan mensajes, aviso si tocan el mismo archivo, `/terminal paralelo` con git worktree.
-- `mods/selector-modelo/`: no cambia de modelo con la caché caliente; nivel Opus para el director en una misión.
-- `mods/presupuesto/`: Haiku en ahorro máximo, 1 skill por pedido con poco límite, aviso cuando se renueva el límite.
-- `mods/memoria`, `mods/quality-coach`: prompt de sistema fijo; HTML y CSS no cuentan como código.
-- `mods/mods-panel/`: pestañas Equipo (con Piloto) y Terminales.
-- `.claude-plugin/marketplace.json`, `.claude/settings.json` y `README.md` al día.
+- Repo `C:\Users\thebo\claude-mods`: se pasó de 16 mods a 6 más `rtk-hook`, que queda solo para la nube.
+  - `mods/selector-modelo` absorbió presupuesto, mejorar-prompt y quality-coach. Archivos nuevos `hooks/reglas.ts`, `hooks/presupuesto.ts`, `hooks/calidad.ts`; trae un solo bloque de reglas y una sola nota por pedido (`notaDelPedido`).
+  - `mods/equipo` absorbió piloto (`hooks/mision.ts`; el piloto es opt-in con `pilotoAuto=false`). Se arregló el `<system-reminder>` que se colaba en el objetivo. Se quitaron aprendizaje, pizarra e /investigar.
+  - `mods/guardian` absorbió respaldo (`hooks/git.ts`, `prueba-git.mts`).
+  - `mods/memoria` absorbió traspaso (`hooks/traspaso.ts`).
+  - `mods/mods-panel` quedó adaptado (8 pestañas).
+  - Borrados: output-trim, token-meter, terminales.
+- Actualizados: `.claude-plugin/marketplace.json`, `.claude/settings.json`, `README.md`, `.gitignore`, `progreso.md`, y ponytail fuera de `scripts/*`.
+- Pruebas: 105 pasan y 0 fallan; los 7 mods validan.
+- MCP sequential-thinking añadido a nivel usuario, y conecta.
+- Archivos de OpenCode reescritos: `C:\Users\thebo\.claude\delegar-opencode.ps1` (trabaja en una copia sin claves y lista los cambios), `C:\Users\thebo\.claude\commands\opencode.md` (reglas estrictas) y la sección de OpenCode en `C:\Users\thebo\.claude\CLAUDE.md`. Respaldo del script viejo: `delegar-opencode.ps1.bak`.
 
 ## Decisiones
-- Precios reales 1:20:40 y caché, verificados en la skill claude-api.
-- Pistas por mensaje, no en el prompt de sistema, para no romper la caché.
-- Plan único con `TodoWrite`: se quitó `plan.md`, que contradecía.
-- OmniRoute descartado: requería demasiada configuración del usuario.
-- No bloquear skills, solo limitarlas: bloquearlas bajaba la calidad.
-- No usar la herramienta Workflow sin que el usuario la pida explícitamente.
+- OpenCode solo para relleno verificable: los modelos gratis pueden guardar los datos, no puede ser un subagente real y Haiku ya es barato.
+- Skill de seguridad de Cloudflare descartada: no hay una de seguridad general, solo Turnstile, y ortiz publica en Netlify.
+- ponytail quitado: repetía la regla de cambio mínimo.
+- rtk-hook se conserva: los instaladores de la nube y Linux lo usan. En la PC basta el hook nativo.
+- El piloto ya no arranca solo, porque gastaba el límite.
 
 ## Pendiente
-1. Comprobar en el PC real: `/equipo probar`, el piloto con un pedido real y el panel.
-2. Confirmar que se quitó el selector antiguo `selector-modelo@inline` (`C:\Users\thebo\.claude\mods`).
-3. Ideas de Opus aún sin hacer: un solo enrutador de avisos, `traspaso` desde el resumen de compactación, aprendizaje por proyecto, costo real por tarea, verificación sin tokens, `git pull` automático en la nube.
+1. Con el OK de ortiz: commit y push a la rama `claude/adoring-ride-khnvyf`.
+2. En `~/.claude/settings.json`:
+   - Quitar los plugins borrados y deshabilitar ponytail y `rtk-hook`.
+   - Borrar `CLAUDE_CODE_PLUGIN_DIRS`, que apunta a una carpeta que no existe.
+   - Después: actualizar el marketplace y reiniciar.
+3. Con permiso: `npm i -g opencode-ai`, luego `opencode run --help` para confirmar los flags (`--dir`, `-m`).
+4. Hacer que guardian revise también los comandos de PowerShell.
+5. El piloto depende de TodoWrite, que no existe en la app de escritorio.
 
 ## Datos clave
-- Actualizar en el PC:
-  `cd C:\Users\thebo\claude-mods` → `git pull origin claude/adoring-ride-khnvyf` → `powershell -ExecutionPolicy Bypass -File scripts\install-mods.ps1`, y reiniciar Claude Code.
-- Diagnóstico: `claude plugin list`.
-- Validar: `claude plugin validate .` y `claude plugin test mods/<nombre>`.
-- Tipos: `npx -p typescript tsc -p <scratchpad>/tsconfig.all.json`.
-- Nube (setup script): `git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/cm && bash /tmp/cm/scripts/cloud-setup.sh`.
-- Reglas de la API de mods:
-  - Las funciones que reciben `$` deben declararse a nivel del archivo.
-  - Las claves de `$.state` y los nombres de `$.env` van como literales.
-  - Los hooks de prueba se registran antes del primer `$`.
-- Commits con las líneas `Co-Authored-By` y `Claude-Session`.
+- Probar un mod: `claude plugin test mods/<x>`; validar: `claude plugin validate mods/<x>`.
+- Repo GitHub: `theboyfgd12ortiz-lgtm/claude`, rama `claude/adoring-ride-khnvyf`.
+- Hook nativo de rtk: `rtk hook claude`, en el PreToolUse de los settings de usuario.
+- MCP en Windows: `claude mcp add --scope user <n> -- cmd /c npx -y <pkg>`. Correrlo desde PowerShell, porque Git Bash convierte `/c` en `C:/`.
+- El tope del equipo es de 6 agentes por tarea.

@@ -1,8 +1,7 @@
 # Instala o actualiza TODO en Windows: los mods de este repo, rtk y los plugins de terceros
-# (caveman, humanizer, ponytail, token-optimizer). Headroom es opcional: $env:WITH_HEADROOM = '1'.
+# (caveman, humanizer, token-optimizer). Headroom es opcional: $env:WITH_HEADROOM = '1'.
 # Uso:  powershell -ExecutionPolicy Bypass -File scripts\install-mods.ps1
 # Es seguro correrlo otra vez: trae lo nuevo. Variables opcionales:
-#   $env:SKIP_RTK, SKIP_CAVEMAN, SKIP_HUMANIZER, SKIP_PONYTAIL, SKIP_TOKEN_OPTIMIZER = '1' para saltar esa parte
 #   $env:CLAUDE_MODS_REPO = 'dueño/repo'
 $ErrorActionPreference = 'Continue'
 $Repo = if ($env:CLAUDE_MODS_REPO) { $env:CLAUDE_MODS_REPO } else { 'theboyfgd12ortiz-lgtm/claude' }
@@ -33,7 +32,7 @@ $Plugins = (Get-Content $List -Raw | ConvertFrom-Json).plugins | ForEach-Object 
 foreach ($p in $Plugins) { InstallOrUpdate "$p@$Market" }
 
 # --- 2. Plugins de terceros, desde su repositorio original ---
-#   caveman (Node) · humanizer · ponytail (Node) · token-optimizer (Python 3)
+#   caveman (Node) · humanizer · token-optimizer (Python 3)
 function AddMarketplace($name, $repo) {
   if (HasMarketplace $name) { claude plugin marketplace update $name | Out-Host; return $true }
   claude plugin marketplace add $repo | Out-Host
@@ -48,7 +47,6 @@ function ThirdParty($skip, $needs, $market, $repo, $id) {
 $Py = if (Get-Command python3 -ErrorAction SilentlyContinue) { 'python3' } elseif (Get-Command python -ErrorAction SilentlyContinue) { 'python' } else { 'python' }
 ThirdParty 'SKIP_CAVEMAN' 'node' 'caveman' 'JuliusBrussee/caveman' 'caveman@caveman'
 ThirdParty 'SKIP_HUMANIZER' '' 'humanizer' 'blader/humanizer' 'humanizer@humanizer'
-ThirdParty 'SKIP_PONYTAIL' 'node' 'ponytail' 'DietrichGebert/ponytail' 'ponytail@ponytail'
 ThirdParty 'SKIP_TOKEN_OPTIMIZER' $Py 'alexgreensh-token-optimizer' 'alexgreensh/token-optimizer' 'token-optimizer@alexgreensh-token-optimizer'
 
 # rtk ya recorta los comandos de Bash: se apaga el recorte propio de token-optimizer para que no peleen.
@@ -68,7 +66,7 @@ $Known = Join-Path $HOME '.claude\plugins\known_marketplaces.json'
 if (Test-Path $Known) {
   try {
     $k = Get-Content $Known -Raw | ConvertFrom-Json
-    foreach ($n in @('claude-mods', 'caveman', 'humanizer', 'ponytail', 'alexgreensh-token-optimizer')) {
+    foreach ($n in @('claude-mods', 'caveman', 'humanizer', 'alexgreensh-token-optimizer')) {
       if ($k.PSObject.Properties[$n]) { $k.$n | Add-Member -NotePropertyName autoUpdate -NotePropertyValue $true -Force }
     }
     [System.IO.File]::WriteAllText($Known, ($k | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false))

@@ -1,6 +1,6 @@
 {
   "name": "equipo",
-  "description": "Un director y su equipo: Claude planifica y reparte el trabajo pesado (leer, buscar, investigar, revisar) a modelos más baratos, cada uno con su especialidad,.",
+  "description": "Un director reparte el trabajo pesado a agentes baratos (explorador, obrero, arreglador, revisor) y, con /piloto, lleva un objetivo de principio a fin: plan, pasos, revisión y resumen.",
   "author": { "name": "theboyfgd12ortiz-lgtm" },
   "types": "./types/index.d.ts"
 }

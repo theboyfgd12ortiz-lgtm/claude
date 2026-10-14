@@ -39,12 +39,7 @@ const TITLE = 'Centro de control'
 const guardianActive = { plugin: 'guardian', key: 'isActive' } as const
 const guardianPaused = { plugin: 'guardian', key: 'isPaused' } as const
 const guardianBlocks = { plugin: 'guardian', key: 'blocks' } as const
-const trimActive = { plugin: 'output-trim', key: 'isActive' } as const
-const trimStats = { plugin: 'output-trim', key: 'stats' } as const
-const coachActive = { plugin: 'quality-coach', key: 'isActive' } as const
-const coachStats = { plugin: 'quality-coach', key: 'stats' } as const
-const meterActive = { plugin: 'token-meter', key: 'isActive' } as const
-const meterTotal = { plugin: 'token-meter', key: 'total' } as const
+const coachStats = { plugin: 'selector-modelo', key: 'calidad' } as const
 const selNivel = { plugin: 'selector-modelo', key: 'nivel' } as const
 const selModo = { plugin: 'selector-modelo', key: 'modo' } as const
 const selTope = { plugin: 'selector-modelo', key: 'tope' } as const
@@ -65,32 +60,26 @@ const health = atom({ plugin: 'mods-panel', key: 'health' } as const, null)
 const asked = atom({ plugin: 'mods-panel', key: 'asked' } as const, null)
 const changes = atom({ plugin: 'mods-panel', key: 'changes' } as const, [])
 const shown = atom({ plugin: 'mods-panel', key: 'shown' } as const, null)
-const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
-const presupuestoAuto = { plugin: 'presupuesto', key: 'isAuto' } as const
+const presupuestoEstado = { plugin: 'selector-modelo', key: 'presupuesto' } as const
 const memoriaNotas = { plugin: 'memoria', key: 'notas' } as const
 const memoriaCuando = { plugin: 'memoria', key: 'at' } as const
 const memoriaAuto = { plugin: 'memoria', key: 'isAuto' } as const
 const equipoAgentes = { plugin: 'equipo', key: 'agentes' } as const
-const equipoInvest = { plugin: 'equipo', key: 'investigacion' } as const
-const terminalesEstado = { plugin: 'terminales', key: 'estado' } as const
-const pilotoMision = { plugin: 'piloto', key: 'mision' } as const
-const pilotoAuto = { plugin: 'piloto', key: 'isAuto' } as const
+const pilotoMision = { plugin: 'equipo', key: 'mision' } as const
+const pilotoAuto = { plugin: 'equipo', key: 'pilotoAuto' } as const
 const equipoAuto = { plugin: 'equipo', key: 'isAuto' } as const
-const equipoAprende = { plugin: 'equipo', key: 'aprendizaje' } as const
 const webInforme = { plugin: 'web', key: 'informe' } as const
 const webServicios = { plugin: 'web', key: 'servicios' } as const
 const webUrls = { plugin: 'web', key: 'urls' } as const
 const webOcupado = { plugin: 'web', key: 'ocupado' } as const
 const webAuto = { plugin: 'web', key: 'isAuto' } as const
 const webUrl = atom({ plugin: 'mods-panel', key: 'webUrl' } as const, '')
-const respaldoPuntos = { plugin: 'respaldo', key: 'puntos' } as const
-const respaldoVista = { plugin: 'respaldo', key: 'vista' } as const
-const respaldoMensaje = { plugin: 'respaldo', key: 'mensaje' } as const
-const respaldoAuto = { plugin: 'respaldo', key: 'isAuto' } as const
-const traspasoNota = { plugin: 'traspaso', key: 'nota' } as const
-const traspasoAuto = { plugin: 'traspaso', key: 'isAuto' } as const
-const mejorarAuto = { plugin: 'mejorar-prompt', key: 'isAuto' } as const
-const mejorarAvisados = { plugin: 'mejorar-prompt', key: 'avisados' } as const
+const respaldoPuntos = { plugin: 'guardian', key: 'respaldoPuntos' } as const
+const respaldoVista = { plugin: 'guardian', key: 'respaldoVista' } as const
+const respaldoMensaje = { plugin: 'guardian', key: 'respaldoMensaje' } as const
+const respaldoAuto = { plugin: 'guardian', key: 'respaldoAuto' } as const
+const traspasoNota = { plugin: 'memoria', key: 'traspaso' } as const
+const traspasoAuto = { plugin: 'memoria', key: 'traspasoAuto' } as const
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'ahora', label: 'Ahora' },
@@ -98,7 +87,6 @@ const TABS: readonly { id: Tab; label: string }[] = [
   { id: 'ahorro', label: 'Ahorro' },
   { id: 'modelo', label: 'Modelo' },
   { id: 'equipo', label: 'Equipo' },
-  { id: 'terminales', label: 'Terminales' },
   { id: 'web', label: 'Web' },
   { id: 'mods', label: 'Mods' },
   { id: 'ayuda', label: 'Ayuda' },
@@ -111,12 +99,6 @@ export const EXTRAS = [
     title: 'Caveman',
     what: 'Respuestas cortas, sin relleno.',
     action: { label: 'Apagar', fill: 'stop caveman' },
-  },
-  {
-    plugin: 'ponytail',
-    title: 'Ponytail',
-    what: 'La solución más simple que funcione.',
-    action: { label: 'Apagar', fill: '/ponytail off' },
   },
   {
     plugin: 'token-optimizer',
@@ -210,7 +192,7 @@ const checkHealth = async ($: EngineInterface) => {
     { name: 'jq', isOk: jq !== null, detail: jq ?? 'no encontrado', why: 'lo necesita el puente de rtk (Windows: winget install jqlang.jq)' },
     { name: 'bash', isOk: bash !== null, detail: bash === null ? 'no encontrado' : 'ok', why: 'corre los hooks (en Windows viene con Git for Windows)' },
     { name: 'Python', isOk: python !== null, detail: python ?? 'no encontrado', why: 'lo necesita Token Optimizer (python.org)' },
-    { name: 'Node.js', isOk: node !== null, detail: node ?? 'no encontrado', why: 'lo necesitan caveman y ponytail (nodejs.org)' },
+    { name: 'Node.js', isOk: node !== null, detail: node ?? 'no encontrado', why: 'lo necesita caveman (nodejs.org)' },
   ]
   await update($, health, () => checks)
   const bad = checks.filter(c => !c.isOk)
@@ -235,7 +217,6 @@ const summary = async ($: EngineInterface): Promise<string> => {
   const n = (await $.state.get(selNivel)).value
   const modo = (await $.state.get(selModo)).value ?? 'auto'
   const x = await read($, extras)
-  const trim = (await $.state.get(trimStats)).value ?? { trims: 0, savedChars: 0 }
   const rtkSession = x.rtk !== null && x.rtkAtStart !== null ? Math.max(0, x.rtk.saved - x.rtkAtStart) : 0
   const paused = (await $.state.get(guardianPaused)).value ?? false
   const blocks = (await $.state.get(guardianBlocks)).value ?? []
@@ -246,7 +227,7 @@ const summary = async ($: EngineInterface): Promise<string> => {
     '**Centro de control** (aquí no se puede dibujar el panel; este es el resumen)',
     '',
     n === undefined ? '- Modelo: el selector elige al enviar tu primer mensaje' : `- Modelo: ${step(n).model}, nivel ${n} de 9 (${modo === 'auto' ? 'automático' : 'fijo'})`,
-    `- Ahorro en esta sesión: ~${short(rtkSession + Math.round(trim.savedChars / 4))} tokens (rtk ${short(rtkSession)}, recortes ${trim.trims})`,
+    `- Ahorro en esta sesión: ~${short(rtkSession)} tokens (rtk)`,
     `- Guardián: ${paused ? 'en pausa' : 'protegiendo'} · ${blocks.length} bloqueos`,
     `- rtk: ${x.rtk === null ? 'no instalado' : `versión ${x.rtk.version}`}`,
     `- Plugins activos: ${plugins.filter(p => !p.includes(' ')).join(', ') || 'ninguno detectado'}`,
@@ -323,7 +304,6 @@ export const register: Register = on => {
     const isMain = e.agentId === undefined
     const said = describeTool(e.tool, input)
     const isPlanTool = e.tool === 'TodoWrite' || e.tool === 'TaskCreate' || e.tool === 'TaskUpdate'
-    const trimBefore = (await $.state.get(trimStats)).value?.trims ?? 0
     const startedAt = await $.clock.now()
     if (isMain && !isPlanTool) await update($, live, l => ({ ...l, running: said.text }))
 
@@ -366,9 +346,6 @@ export const register: Register = on => {
       const where = isMain ? '' : ' (subagente)'
       await note($, ran.isError === true ? '✕' : said.icon, `${said.text}${where} · ${duration(took)}`, ran.isError === true ? 'bad' : 'info')
     }
-
-    const trimAfter = (await $.state.get(trimStats)).value?.trims ?? 0
-    if (trimAfter > trimBefore) await note($, '✂', 'Salida muy larga recortada (se guardó completa en /tmp)', 'ok')
 
     return ran
   }).catch(($, e, next) => next(e))
@@ -445,9 +422,8 @@ export const register: Register = on => {
     const s = step(nivel)
     const paused = (await $.state.get(guardianPaused)).value ?? false
     const guardianOn = ((await $.state.get(guardianActive)).value ?? false) && !paused
-    const trim = (await $.state.get(trimStats)).value ?? { trims: 0, savedChars: 0 }
     const rtkSession = x.rtk !== null && x.rtkAtStart !== null ? Math.max(0, x.rtk.saved - x.rtkAtStart) : 0
-    const savedSession = rtkSession + Math.round(trim.savedChars / 4)
+    const savedSession = rtkSession
 
     const Section = (p: { title: string; children?: unknown }) => (
       <Box flexDirection="column" marginTop={1}>
@@ -661,8 +637,6 @@ export const register: Register = on => {
       )
     } else if (current === 'ahorro') {
       const hist = await read($, history)
-      const total = (await $.state.get(meterTotal)).value
-      const read_ = total ? total.input + total.cacheRead + total.cacheWrite : 0
       const last = hist.at(-1)
       const base = hist.length > 0 ? Math.min(...hist.map(p => p.fresh + p.cached)) : 0
       body = (
@@ -674,14 +648,7 @@ export const register: Register = on => {
               </Text>{' '}
               tokens que no se gastaron
             </Text>
-            <Text dimColor>
-              rtk {short(rtkSession)} · recortes {short(Math.round(trim.savedChars / 4))}
-            </Text>
-            {total !== undefined && (
-              <Text dimColor>
-                {total.turns} respuestas · {short(read_)} leídos ({percent(total.cacheRead, read_)}% de caché) · {short(total.output)} escritos
-              </Text>
-            )}
+            <Text dimColor>rtk {short(rtkSession)}</Text>
           </Section>
 
           <Section title="GASTO POR RESPUESTA">
@@ -812,13 +779,11 @@ export const register: Register = on => {
     } else if (current === 'equipo') {
       const lista = (await $.state.get(equipoAgentes)).value ?? []
       const hayEquipo = x.plugins.includes('equipo') || lista.length > 0
-      const invest = (await $.state.get(equipoInvest)).value ?? null
       const autoEq = (await $.state.get(equipoAuto)).value ?? true
-      const aprendido = Object.entries((await $.state.get(equipoAprende)).value ?? {})
       const costos = equipoCostos(lista)
       const piloto = (await $.state.get(pilotoMision)).value ?? null
-      const pilotoOn = (await $.state.get(pilotoAuto)).value ?? true
-      const hayPiloto = x.plugins.includes('piloto') || piloto !== null
+      const pilotoOn = (await $.state.get(pilotoAuto)).value ?? false
+      const hayPiloto = hayEquipo
       const COLOR_FAM = { haiku: 'success', sonnet: 'warning', opus: 'error', otro: 'inactive' } as const
       body = !hayEquipo ? (
         <Section title="EQUIPO">
@@ -850,11 +815,10 @@ export const register: Register = on => {
           )}
 
           <Section title="CÓMO TRABAJA">
-            <Text wrap="wrap" dimColor>Claude dirige y reparte lo pesado (buscar, leer, investigar, revisar) a modelos más baratos. Aprende: si uno barato falla seguido, sube a Sonnet; si luego acierta mucho, vuelve a probar el barato.</Text>
+            <Text wrap="wrap" dimColor>Claude dirige y reparte lo pesado (buscar, leer, revisar) a modelos más baratos.</Text>
             <Box flexDirection="row" columnGap={1} marginTop={1}>
               <Button key="eq-auto" label={autoEq ? 'Equipo: activo' : 'Equipo: apagado'} variant={autoEq ? 'primary' : 'secondary'} onPress={() => $.command.run({ command: 'equipo', args: autoEq ? 'off' : 'on' })} />
               <Button key="eq-test" label="Probar que funciona" onPress={() => $.command.run({ command: 'equipo', args: 'probar' })} />
-              <Button key="eq-forget" label="Olvidar lo aprendido" onPress={() => $.command.run({ command: 'equipo', args: 'olvidar' })} />
             </Box>
           </Section>
 
@@ -880,75 +844,6 @@ export const register: Register = on => {
                 <Text dimColor>{r.descripcion} · {short(r.nuevo + r.cache + r.escrito)} tokens</Text>
               </Text>
             ))}
-          </Section>
-
-          <Section title="LO QUE HA APRENDIDO">
-            {aprendido.length === 0 && <Text dimColor>Todavía nada: aprende con cada tarea que reparte.</Text>}
-            {aprendido.map(([tipo, r]) => (
-              <Text key={`ap-${tipo}`} wrap="truncate-end">
-                <Text bold>{tipo.replace('equipo:', '')}</Text>{' '}
-                <Text dimColor>
-                  {r.veces} {r.veces === 1 ? 'trabajo' : 'trabajos'} · {r.nivel === null ? 'modelo de siempre' : `ahora con ${r.nivel}`} · {r.neto >= 0 ? 'ahorra' : 'pierde'} ~{short(Math.abs(r.neto))}
-                  {r.subidas > 0 ? ` · lo subió ${r.subidas} ${r.subidas === 1 ? 'vez' : 'veces'}` : ''}
-                </Text>
-              </Text>
-            ))}
-          </Section>
-
-          <Section title="INVESTIGAR EN INTERNET">
-            <Text dimColor>Un agente barato (Haiku) busca y te responde con fuentes.</Text>
-            {Input !== undefined && (
-              <Input key="eq-ask" label="Pregunta " placeholder="¿Qué quieres saber?" value="" submitLabel="investigar" onSubmit={(v: string) => $.command.run({ command: 'investigar', args: v })} />
-            )}
-            {invest !== null && (
-              <Box flexDirection="column" marginTop={1}>
-                <Text bold wrap="truncate-end">{invest.pregunta}</Text>
-                {invest.estado === 'trabajando' && <Text color="warning">Investigando…</Text>}
-                {invest.estado === 'fallo' && <Text color="error">No salió: prueba de nuevo.</Text>}
-                {invest.estado === 'listo' && <Text wrap="wrap">{invest.texto.length > 900 ? `${invest.texto.slice(0, 900)}…` : invest.texto}</Text>}
-                {invest.estado === 'listo' && (
-                  <Box flexDirection="row" columnGap={1} marginTop={1}>
-                    <Button key="eq-save" label={invest.archivo === null ? 'Guardar en el proyecto' : `Guardado: ${invest.archivo}`} onPress={() => $.command.run({ command: 'investigar', args: 'guardar' })} />
-                  </Box>
-                )}
-              </Box>
-            )}
-          </Section>
-        </Box>
-      )
-    } else if (current === 'terminales') {
-      const t = (await $.state.get(terminalesEstado)).value ?? null
-      const otras = t?.otras ?? []
-      body = t === null || t.yo === null ? (
-        <Section title="TERMINALES">
-          <Text dimColor>El mod "terminales" no está instalado. Corre el instalador para tenerlo.</Text>
-        </Section>
-      ) : (
-        <Box flexDirection="column">
-          <Section title="ESTA TERMINAL">
-            <Text wrap="truncate-end">
-              <Text bold color="success">{t.yo.nombre}</Text> <Text dimColor>{t.yo.tarea !== '' ? t.yo.tarea : 'sin tarea todavía (se llena con lo que pidas)'}</Text>
-            </Text>
-          </Section>
-
-          <Section title="LAS OTRAS TERMINALES DE ESTE PROYECTO">
-            {otras.length === 0 && <Text dimColor>No hay otras abiertas. Abre otra terminal en esta carpeta (o una copia con el botón de abajo) y aparecerá aquí.</Text>}
-            {otras.map(o => (
-              <Text key={`term-${o.id}`} wrap="truncate-end">
-                <Text color="warning">●</Text> <Text bold>{o.nombre}</Text> <Text dimColor>{o.tarea !== '' ? o.tarea : 'sin tarea'} · {Object.keys(o.archivos).length} archivos</Text>
-              </Text>
-            ))}
-            <Text dimColor>Se avisan solas si dos tocan el mismo archivo; los mensajes llegan en el siguiente pedido de la otra.</Text>
-          </Section>
-
-          <Section title="TRABAJAR EN PARALELO">
-            <Text wrap="wrap" dimColor>Crea una copia del proyecto en su propia rama para que otra terminal trabaje sin pisarte. Al terminar se junta con git merge.</Text>
-            {Input !== undefined && (
-              <Input key="term-par" label="Nombre " placeholder="arreglar-menu" value="" submitLabel="crear copia" onSubmit={(v: string) => $.command.run({ command: 'terminal', args: `paralelo ${v}` })} />
-            )}
-            {Input !== undefined && (
-              <Input key="term-msg" label="Mensaje " placeholder="T2 ya terminé el encabezado" value="" submitLabel="enviar" onSubmit={(v: string) => $.command.run({ command: 'terminal', args: `enviar ${v}` })} />
-            )}
           </Section>
         </Box>
       )
@@ -1056,129 +951,58 @@ export const register: Register = on => {
     } else if (current === 'mods') {
       const blocks = (await $.state.get(guardianBlocks)).value ?? []
       const coach = (await $.state.get(coachStats)).value ?? { codeTurns: 0, verifiedTurns: 0, lastWarning: null }
+      const has = (n: string) => x.plugins.includes(n)
+      const nota = (await $.state.get(traspasoNota)).value
       const rows: { key: string; on: boolean; name: string; what: string; stat?: string; action?: { label: string; press: () => unknown } }[] = [
+        {
+          key: 'selector-modelo',
+          on: hasSelector,
+          name: 'Selector de modelo',
+          what: 'Elige el modelo según lo difícil del pedido, cuida el límite de uso, mejora pedidos vagos y avisa si no se comprobó el código.',
+          stat: !hasSelector ? 'no instalado' : `nivel ${nivel} · ${coach.verifiedTurns}/${coach.codeTurns} cambios verificados${budget !== undefined && budget.nivel !== 'normal' ? ` · ${budget.nivel === 'ahorro' ? 'modo ahorro' : 'ahorro máximo'}` : ''}`,
+          action: hasSelector ? { label: 'Abrir', press: () => update($, tab, () => 'modelo' as const) } : undefined,
+        },
+        {
+          key: 'equipo',
+          on: has('equipo') && ((await $.state.get(equipoAuto)).value ?? true),
+          name: 'Equipo',
+          what: 'Reparte el trabajo pesado a agentes baratos (Haiku, Sonnet). El piloto, que sigue una meta paso a paso, es opcional.',
+          stat: !has('equipo') ? 'no instalado' : `${((await $.state.get(equipoAgentes)).value ?? []).length} agentes han trabajado`,
+          action: has('equipo') ? { label: 'Abrir', press: () => update($, tab, () => 'equipo' as const) } : undefined,
+        },
         {
           key: 'guardian',
           on: guardianOn,
           name: 'Guardián',
-          what: 'Bloquea borrados masivos, push forzados y lectura de contraseñas.',
-          stat: `${blocks.length} bloqueos${blocks.at(-1) ? ` · último: ${blocks.at(-1)?.why}` : ''}`,
+          what: 'Bloquea lo peligroso (borrados masivos, push forzados, contraseñas) y guarda puntos de restauración para deshacer.',
+          stat: `${blocks.length} bloqueos${blocks.at(-1) ? ` · último: ${blocks.at(-1)?.why}` : ''} · ${((await $.state.get(respaldoPuntos)).value ?? []).length} puntos guardados`,
           action: { label: paused ? 'Reactivar' : 'Pausar', press: () => $.command.run({ command: 'guardian', args: paused ? 'on' : 'off' }) },
         },
         {
-          key: 'rtk',
-          on: x.rtk !== null,
-          name: 'rtk',
-          what: 'git, ls, grep y tests me devuelven solo lo importante.',
-          stat: x.rtk !== null ? `${x.rtk.commands} comandos · ~${short(x.rtk.saved)} tokens (${x.rtk.percent}%) en total` : 'no instalado: corre el instalador (instala rtk y jq)',
-        },
-        {
-          key: 'trim',
-          on: (await $.state.get(trimActive)).value ?? false,
-          name: 'Recorte de salidas',
-          what: 'Si una salida es enorme, me pasa solo el inicio y el final.',
-          stat: `${trim.trims} recortes`,
-        },
-        {
-          key: 'coach',
-          on: (await $.state.get(coachActive)).value ?? false,
-          name: 'Control de calidad',
-          what: 'Me recuerda probar el código antes de decir "listo".',
-          stat: `${coach.verifiedTurns}/${coach.codeTurns} cambios verificados`,
-        },
-        {
-          key: 'meter',
-          on: (await $.state.get(meterActive)).value ?? false,
-          name: 'Medidor de tokens',
-          what: 'La barra sobre el cuadro de mensaje con el gasto de cada respuesta.',
-          action: { label: 'Reiniciar', press: () => $.command.run({ command: 'tokens', args: 'reset' }) },
-        },
-        {
           key: 'memoria',
-          on: x.plugins.includes('memoria') && ((await $.state.get(memoriaAuto)).value ?? true),
-          name: 'Memoria del proyecto',
-          what: 'Apunta solo lo importante de cada proyecto (cómo probarlo, publicarlo, decisiones) y lo recuerda en la próxima charla.',
-          stat: !x.plugins.includes('memoria')
+          on: has('memoria') && ((await $.state.get(memoriaAuto)).value ?? true),
+          name: 'Memoria',
+          what: 'Recuerda el proyecto (cómo probarlo, publicarlo, decisiones) y guarda el progreso para seguir en una charla limpia.',
+          stat: !has('memoria')
             ? 'no instalado'
-            : `${(await $.state.get(memoriaNotas)).value ?? 0} notas${((await $.state.get(memoriaCuando)).value ?? 0) > 0 ? ` · actualizada ${hace((await $.state.get(memoriaCuando)).value ?? now, now)}` : ''}`,
-          action: x.plugins.includes('memoria') ? { label: 'Actualizar ahora', press: () => $.command.run({ command: 'memoria', args: 'actualizar' }) } : undefined,
-        },
-        {
-          key: 'equipo',
-          on: x.plugins.includes('equipo') && ((await $.state.get(equipoAuto)).value ?? true),
-          name: 'Equipo',
-          what: 'Reparte el trabajo pesado a modelos baratos (Haiku, Sonnet), aprende de sus fallos y puede investigar en internet.',
-          stat: !x.plugins.includes('equipo') ? 'no instalado' : `${((await $.state.get(equipoAgentes)).value ?? []).length} agentes han trabajado`,
-          action: x.plugins.includes('equipo') ? { label: 'Abrir', press: () => update($, tab, () => 'equipo' as const) } : undefined,
-        },
-        {
-          key: 'terminales',
-          on: x.plugins.includes('terminales'),
-          name: 'Terminales',
-          what: 'Varias terminales de Claude Code en el mismo proyecto: se ven, se mandan mensajes y no se pisan los archivos.',
-          stat: !x.plugins.includes('terminales') ? 'no instalado' : `${((await $.state.get(terminalesEstado)).value?.otras ?? []).length} otras abiertas`,
-          action: x.plugins.includes('terminales') ? { label: 'Abrir', press: () => update($, tab, () => 'terminales' as const) } : undefined,
-        },
-        {
-          key: 'piloto',
-          on: x.plugins.includes('piloto') && ((await $.state.get(pilotoAuto)).value ?? true),
-          name: 'Piloto',
-          what: 'Le dices qué quieres lograr y se planea, reparte, ejecuta y revisa solo, con tope de pasos y freno si queda poco límite.',
-          stat: !x.plugins.includes('piloto') ? 'no instalado' : (await $.state.get(pilotoMision)).value?.activa ? 'en marcha' : 'en espera',
-          action: x.plugins.includes('piloto') ? { label: 'Abrir', press: () => update($, tab, () => 'equipo' as const) } : undefined,
+            : `${(await $.state.get(memoriaNotas)).value ?? 0} notas${((await $.state.get(memoriaCuando)).value ?? 0) > 0 ? ` · actualizada ${hace((await $.state.get(memoriaCuando)).value ?? now, now)}` : ''}${nota ? ` · progreso guardado ${hace(nota.at, now)}` : ''}`,
+          action: has('memoria') ? { label: 'Actualizar ahora', press: () => $.command.run({ command: 'memoria', args: 'actualizar' }) } : undefined,
         },
         {
           key: 'web',
-          on: x.plugins.includes('web'),
+          on: has('web'),
           name: 'Web',
           what: 'Revisa páginas, avisa si GitHub/Netlify/Supabase están caídos y revisa solo tu sitio al publicarlo.',
-          stat: !x.plugins.includes('web') ? 'no instalado' : (await $.state.get(webInforme)).value ? `última revisión: ${(await $.state.get(webInforme)).value?.puntos}/100` : 'aún no revisaste ninguna página',
-          action: x.plugins.includes('web') ? { label: 'Abrir', press: () => update($, tab, () => 'web' as const) } : undefined,
+          stat: !has('web') ? 'no instalado' : (await $.state.get(webInforme)).value ? `última revisión: ${(await $.state.get(webInforme)).value?.puntos}/100` : 'aún no revisaste ninguna página',
+          action: has('web') ? { label: 'Abrir', press: () => update($, tab, () => 'web' as const) } : undefined,
         },
+        { key: 'mods-panel', on: true, name: 'Panel de mods', what: 'Este panel: muestra qué hace cada mod y su estado en vivo.' },
         {
-          key: 'respaldo',
-          on: x.plugins.includes('respaldo') && ((await $.state.get(respaldoAuto)).value ?? true),
-          name: 'Respaldo',
-          what: 'Antes de cada pedido guardo un punto de restauración, para poder deshacer sin miedo.',
-          stat: !x.plugins.includes('respaldo') ? 'no instalado' : `${((await $.state.get(respaldoPuntos)).value ?? []).length} puntos guardados`,
-          action: x.plugins.includes('respaldo') ? { label: 'Ver y deshacer', press: () => update($, tab, () => 'cambios' as const) } : undefined,
-        },
-        {
-          key: 'presupuesto',
-          on: x.plugins.includes('presupuesto') && ((await $.state.get(presupuestoAuto)).value ?? true),
-          name: 'Presupuesto',
-          what: 'Si tu límite semanal se llena, baja el modelo y pide respuestas más económicas.',
-          stat:
-            budget === undefined
-              ? x.plugins.includes('presupuesto') ? undefined : 'no instalado'
-              : `${budget.nivel === 'normal' ? 'normal' : budget.nivel === 'ahorro' ? 'modo ahorro' : 'ahorro máximo'}${budget.semana !== null ? ` · semana ${Math.round(budget.semana)}%` : ''}`,
-          action: x.plugins.includes('presupuesto')
-            ? (await $.state.get(presupuestoAuto)).value === false
-              ? { label: 'Activar', press: () => $.command.run({ command: 'presupuesto', args: 'on' }) }
-              : { label: 'Apagar', press: () => $.command.run({ command: 'presupuesto', args: 'off' }) }
-            : undefined,
-        },
-        {
-          key: 'traspaso',
-          on: x.plugins.includes('traspaso') && ((await $.state.get(traspasoAuto)).value ?? true),
-          name: 'Traspaso',
-          what: 'Guarda solo el progreso cuando la charla se llena, para seguir en una limpia sin perder nada.',
-          stat: !x.plugins.includes('traspaso')
-            ? 'no instalado'
-            : (await $.state.get(traspasoNota)).value
-              ? `nota guardada ${hace((await $.state.get(traspasoNota)).value?.at ?? now, now)}`
-              : 'aún no hay nota guardada',
-          action: x.plugins.includes('traspaso') ? { label: 'Guardar ahora', press: () => $.command.run({ command: 'guardar' }) } : undefined,
-        },
-        {
-          key: 'mejorar',
-          on: x.plugins.includes('mejorar-prompt') && ((await $.state.get(mejorarAuto)).value ?? true),
-          name: 'Mejorar pedido',
-          what: 'Si escribes algo corto y vago, Claude pregunta lo que falta antes de construir. Tu texto no cambia.',
-          stat: !x.plugins.includes('mejorar-prompt') ? 'no instalado' : `${(await $.state.get(mejorarAvisados)).value ?? 0} pedidos vagos atendidos`,
-          action: x.plugins.includes('mejorar-prompt')
-            ? { label: 'Mejorar mi borrador', press: () => $.command.run({ command: 'mejorar' }) }
-            : undefined,
+          key: 'rtk',
+          on: x.rtk !== null,
+          name: 'rtk (de terceros)',
+          what: 'Hook nativo: git, ls, grep y tests me devuelven solo lo importante.',
+          stat: x.rtk !== null ? `${x.rtk.commands} comandos · ~${short(x.rtk.saved)} tokens (${x.rtk.percent}%) en total` : 'no instalado: corre el instalador (instala rtk y jq)',
         },
         ...EXTRAS.map(t => ({
           key: t.plugin,
@@ -1205,6 +1029,7 @@ export const register: Register = on => {
             </Box>
           </Section>
           <Section title={`MODS  ${active}/${rows.length} activos`}>
+            <Text dimColor>Los 6 mods propios más, de terceros: caveman, humanizer, token-optimizer y rtk (hook nativo).</Text>
             {rows.map(r => (
               <Box key={`row-${r.key}`} flexDirection="column" marginTop={1}>
                 <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
@@ -1226,17 +1051,17 @@ export const register: Register = on => {
           <Section title="COMANDOS">
             <Text>/mods · este panel</Text>
             <Text>/nivel 1-9 · auto · tope N · el modelo</Text>
-            <Text>/guardian off · on · protecciones</Text>
             <Text>/presupuesto · on · off · cuidar el límite</Text>
-            <Text>/guardar · /retomar · seguir en una charla limpia</Text>
             <Text>/mejorar &lt;pedido&gt; · pedidos claros</Text>
+            <Text>/equipo on · off · probar · agentes baratos</Text>
+            <Text>/piloto &lt;objetivo&gt; · meta paso a paso (opcional)</Text>
+            <Text>/guardian off · on · protecciones</Text>
             <Text>/respaldo · puntos de restauración (el botón Deshacer está en Cambios)</Text>
-            <Text>/sitio &lt;dirección&gt; · revisar una página (todo está en la pestaña Web)</Text>
+            <Text>/guardar · /retomar · /traspaso · seguir en una charla limpia</Text>
             <Text>/memoria · lo que Claude recuerda del proyecto · borrar</Text>
-            <Text>/tokens · gasto de la sesión</Text>
-            <Text>/caveman · stop caveman · respuestas cortas</Text>
-            <Text>/ponytail off · soluciones mínimas</Text>
-            <Text>/token-optimizer · informe de contexto</Text>
+            <Text>/sitio &lt;dirección&gt; · revisar una página (todo está en la pestaña Web)</Text>
+            <Text>/mods · este panel</Text>
+            <Text dimColor>De terceros: /caveman, /token-optimizer, humanizer y rtk (hook nativo).</Text>
           </Section>
           <Section title="PALABRAS">
             <Text>
@@ -1254,7 +1079,7 @@ export const register: Register = on => {
           </Section>
           <Section title="TRUCOS">
             <Text dimColor>• Un tema por conversación; para otro, /clear.</Text>
-            <Text dimColor>• Para algo delicado (un cliente), sube el nivel o apaga caveman y ponytail.</Text>
+            <Text dimColor>• Para algo delicado (un cliente), sube el nivel o apaga caveman.</Text>
             <Text dimColor>• Pide "haz un plan primero" y verás los pasos en la pestaña Ahora.</Text>
             <Text dimColor>• Charla muy larga: /guardar, luego /clear y /retomar. Sigues igual y gastas mucho menos.</Text>
             <Text dimColor>• Pedido vago: /mejorar antes de enviarlo te ahorra idas y vueltas.</Text>

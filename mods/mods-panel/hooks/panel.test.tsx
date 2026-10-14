@@ -174,10 +174,10 @@ test('the Cambios tab lists each edit and shows its diff', async ($, on) => {
 
 /** A stand-in for traspaso: it publishes a saved note under its own name, as the real mod does. */
 const traspasoSimulado = {
-  name: 'traspaso',
+  name: 'memoria',
   register: (on: On) => {
     on('session.start', async ($, e, next) => {
-      await $.state.set({ plugin: 'traspaso', key: 'nota' } as const, {
+      await $.state.set({ plugin: 'memoria', key: 'traspaso' } as const, {
         at: Date.now() - 3_600_000,
         donde: '.claude/traspaso.md',
         resumen: 'Landing de la panadería',
@@ -207,11 +207,11 @@ test('offers to resume a saved note in a fresh chat', { plugins: [traspasoSimula
 
 /** A stand-in for respaldo: it publishes a restore point and, on the second start, a pending preview. */
 const respaldoSimulado = {
-  name: 'respaldo',
+  name: 'guardian',
   register: (on: On) => {
     on('session.start', async ($, e, next) => {
-      await $.state.set({ plugin: 'respaldo', key: 'puntos' } as const, [{ id: 'p1', sha: 'abc', at: 1, pedido: 'haz la página', existentes: [] }])
-      await $.state.set({ plugin: 'respaldo', key: 'vista' } as const, { id: 'p1', modificados: ['index.html'], creados: ['nuevo.css'] })
+      await $.state.set({ plugin: 'guardian', key: 'respaldoPuntos' } as const, [{ id: 'p1', sha: 'abc', at: 1, pedido: 'haz la página', existentes: [] }])
+      await $.state.set({ plugin: 'guardian', key: 'respaldoVista' } as const, { id: 'p1', modificados: ['index.html'], creados: ['nuevo.css'] })
 
       return next(e)
     })
@@ -287,7 +287,7 @@ test('the Web tab shows the review, the services and a way to ask Claude to fix 
   }
 })
 
-/** A stand-in for equipo: two agents that worked, one lesson learned and a finished research. */
+/** A stand-in for equipo: two agents that worked and a pilot mission in progress, 2 of 5 steps done. */
 const equipoSimulado = {
   name: 'equipo',
   register: (on: On) => {
@@ -296,17 +296,14 @@ const equipoSimulado = {
         { id: 'a1', tipo: 'equipo:explorador', descripcion: 'buscar login', modelo: 'haiku', familia: 'haiku', padre: 'opus', at: 1, fin: 2, estado: 'listo', nuevo: 1000, cache: 0, escrito: 100 },
         { id: 'a2', tipo: 'equipo:obrero', descripcion: 'cambiar botón', modelo: 'sonnet', familia: 'sonnet', padre: 'opus', at: 1, fin: null, estado: 'trabajando', nuevo: 500, cache: 0, escrito: 50 },
       ])
-      await $.state.set({ plugin: 'equipo', key: 'aprendizaje' } as const, {
-        'equipo:explorador': { nivel: 'sonnet', recientes: [], seguidos: 0, veces: 5, unidades: 500, subidas: 1, neto: 100 },
-      })
-      await $.state.set({ plugin: 'equipo', key: 'investigacion' } as const, { id: 'x', pregunta: 'mejor hosting gratis', at: 1, estado: 'listo', texto: 'Netlify y Vercel.', archivo: null })
+      await $.state.set({ plugin: 'equipo', key: 'mision' } as const, { activa: true, objetivo: 'una tienda', hechos: 2, total: 5, siguiente: 'probar en móvil', continuaciones: 2, max: 8, fin: '', revision: 'sin revisar' })
 
       return next(e)
     })
   },
 }
 
-test('the Equipo tab shows agents, estimated savings, what it learned and the research', { plugins: [equipoSimulado] }, async ($, on) => {
+test('the Equipo tab shows agents, estimated savings and the Piloto', { plugins: [equipoSimulado] }, async ($, on) => {
   mock.clock(on)
   on('command.register', () => ({ value: { command: 'x' } }) as never)
   on('ui.open', () => ({ value: { isPlaced: true } }) as never)
@@ -318,72 +315,11 @@ test('the Equipo tab shows agents, estimated savings, what it learned and the re
   await ui.press({ key: 'tab-equipo' })
   expect(await ui.find({ type: 'Text', text: /% menos/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /buscar login/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /ahora con sonnet/ })).toBeDefined()
   expect(await ui.find({ key: 'eq-test' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Netlify y Vercel/ })).toBeDefined()
-  expect(await ui.find({ key: 'eq-save' })).toBeDefined()
-  expect(await ui.find({ key: 'eq-ask' })).toBeDefined()
-  await ui.unmount()
-})
-
-/** A stand-in for terminales: this terminal is T2 and T1 is working next to it. */
-const terminalesSimulado = {
-  name: 'terminales',
-  register: (on: On) => {
-    on('session.start', async ($, e, next) => {
-      await $.state.set({ plugin: 'terminales', key: 'estado' } as const, {
-        yo: { id: 'b', nombre: 'T2', inicio: 1, ultimo: 2, tarea: 'cambiar los colores del encabezado', archivos: {} },
-        otras: [{ id: 'a', nombre: 'T1', inicio: 1, ultimo: 2, tarea: 'arreglar el login', archivos: { 'src/login.ts': 2 } }],
-        recibidos: 0,
-      })
-
-      return next(e)
-    })
-  },
-}
-
-test('the Terminales tab shows this terminal, the others and a way to open one in parallel', { plugins: [terminalesSimulado] }, async ($, on) => {
-  mock.clock(on)
-  on('command.register', () => ({ value: { command: 'x' } }) as never)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  on('command.list', () => ({ value: [] }) as never)
-  on('session.start', () => ({ cwd: '/r' }) as never)
-  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
-
-  const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
-  await ui.press({ key: 'tab-terminales' })
-  expect(await ui.find({ type: 'Text', text: /cambiar los colores del encabezado/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /arreglar el login/ })).toBeDefined()
-  expect(await ui.find({ key: 'term-par' })).toBeDefined()
-  expect(await ui.find({ key: 'term-msg' })).toBeDefined()
-  await ui.unmount()
-})
-
-/** A stand-in for piloto: a mission in progress, 2 of 5 steps done. */
-const pilotoSimulado = {
-  name: 'piloto',
-  register: (on: On) => {
-    on('session.start', async ($, e, next) => {
-      await $.state.set({ plugin: 'piloto', key: 'mision' } as const, { activa: true, objetivo: 'una tienda', hechos: 2, total: 5, siguiente: 'probar en móvil', continuaciones: 2, max: 8, fin: '', revision: 'sin revisar' })
-
-      return next(e)
-    })
-  },
-}
-
-test('the Equipo tab shows the Piloto: a box to say what you want, the progress and a way to stop it', { plugins: [pilotoSimulado, equipoSimulado] }, async ($, on) => {
-  mock.clock(on)
-  on('command.register', () => ({ value: { command: 'x' } }) as never)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  on('command.list', () => ({ value: [] }) as never)
-  on('session.start', () => ({ cwd: '/r' }) as never)
-  await $.session.start({ cwd: '/r', surface: 'desktop', isInteractive: true, source: 'startup' } as never)
-
-  const ui = await $.ui.mount({ plugin: 'mods-panel', surface: 'desktop', ...PANE })
-  await ui.press({ key: 'tab-equipo' })
-  expect(await ui.find({ key: 'pil-ask' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Sigue: probar en móvil/ })).toBeDefined()
+  expect(await ui.find({ key: 'pil-ask' })).toBeDefined()
   expect(await ui.find({ key: 'pil-stop' })).toBeDefined()
   expect(await ui.find({ key: 'pil-auto' })).toBeDefined()
+  expect(await ui.find({ key: 'eq-ask' })).toBeUndefined()
   await ui.unmount()
 })

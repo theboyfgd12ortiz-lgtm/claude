@@ -1,6 +1,6 @@
 {
   "name": "guardian",
-  "description": "Blocks destructive shell commands and secret-file reads before they run; /guardian off to pause it.",
+  "description": "Bloquea comandos destructivos y claves en el código, y guarda un punto de restauración antes de cada pedido.",
   "author": {
     "name": "theboyfgd12ortiz-lgtm"
   },

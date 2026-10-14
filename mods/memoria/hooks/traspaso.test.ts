@@ -1,10 +1,10 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { ARCHIVO, mensajeRetomar, resumenDe, tocaGuardar } from './register'
+import { ARCHIVO, mensajeRetomar, resumenDe, tocaGuardar } from './traspaso'
 
 const CMD = { origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 120 } } as const
 const OK = { isAnswered: true, text: '## Objetivo\nLanding de la panadería\n## Hecho\nnada', usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } }
-const quitarRuta = (ruta: string) => ruta.replace(/^.*?(\.claude\/|(?=traspaso\.md$))/, '$1')
+const quitarRuta = (ruta: string) => ruta.replaceAll('\\', '/').replace(/^.*?(\.claude\/|(?=traspaso\.md$))/, '$1')
 
 test('decide cuándo guardar solo', () => {
   const base = { ahora: 1_000_000, ultimo: 0, porcientoUltimo: 0 }

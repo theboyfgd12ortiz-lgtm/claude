@@ -1,17 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Aprendizaje, Investigacion, Registro } from '../types'
-import { avisoCompactar, entradaPizarra, esTareaGrande, pistaDeEquipo, pizarraDe, sumarEntrada } from './contexto'
-import { aprender, esBueno, lecciones } from './aprende'
-import { AGENTES, ahorro, costo, dificultadDe, familiaDe, familiaDeNivel, rango, GUIA, modeloParaAgente, slug } from './reglas'
+import type { Mision, Paso, Registro } from '../types'
+import { AVISO_COMPACTAR, pistaDeEquipo } from './contexto'
+import { decidir, esTareaGrande, hayPruebasEnPackage, limpiarEnvoltorios, MAX_CONTINUACIONES, protocolo, recortar, resumenPlan } from './mision'
+import { AGENTES, ahorro, dificultadDe, familiaDe, familiaDeNivel, rango, GUIA, modeloParaAgente } from './reglas'
 
+const VACIA: Mision = { activa: false, objetivo: '', hechos: 0, total: 0, siguiente: null, continuaciones: 0, max: MAX_CONTINUACIONES, fin: '', revision: 'sin revisar' }
 const agentes = atom({ plugin: 'equipo', key: 'agentes' } as const, [])
-const investigacion = atom({ plugin: 'equipo', key: 'investigacion' } as const, null)
 const isAuto = atom({ plugin: 'equipo', key: 'isAuto' } as const, true)
-const aprendizaje = atom({ plugin: 'equipo', key: 'aprendizaje' } as const, {})
+const mision = atom({ plugin: 'equipo', key: 'mision' } as const, VACIA)
+const pilotoAuto = atom({ plugin: 'equipo', key: 'pilotoAuto' } as const, false)
 const selectorNivel = { plugin: 'selector-modelo', key: 'nivel' } as const
-const presupuestoEstado = { plugin: 'presupuesto', key: 'estado' } as const
+const presupuestoEstado = { plugin: 'selector-modelo', key: 'presupuesto' } as const
 
 /** De dónde vienen los mensajes de la persona. */
 const PERSONA = new Set(['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified'])
@@ -21,9 +22,6 @@ const MAX_PARALELO = 3
 const MAX_TURNO = 6
 /** Un agente "trabajando" desde hace más de esto se da por colgado y no cuenta. */
 const COLGADO_MS = 15 * 60 * 1000
-
-/** Una investigación que lleva más que esto sin responder se da por perdida y deja pedir otra. */
-const INVESTIGAR_MAX_MS = 10 * 60 * 1000
 
 /** Cuántos agentes se recuerdan para el panel. */
 const MAX = 40
@@ -52,35 +50,42 @@ const lanzar = async ($: EngineInterface, args: Parameters<EngineInterface['agen
   return r
 }
 
-/** Cambia lo aprendido y lo guarda para la próxima sesión. */
-const recordar = async ($: EngineInterface, cambio: (a: Aprendizaje) => Aprendizaje) => {
-  const nuevo = await update($, aprendizaje, cambio)
-  await $.store.set('aprendizaje', nuevo).catch(() => undefined)
+// Lo que el piloto recuerda entre turnos (a nivel del módulo: las funciones que reciben `$` se declaran fuera de register).
+let plan: Paso[] = []
+let ultimoSiguiente: string | null = null
+let repeticiones = 0
+let yaRevisado = false
+let veredicto: 'ok' | 'problemas' | null = null
+let rondas = 0
+let sinVeredicto = 0
+
+/** Si el proyecto tiene una suite de pruebas: entonces la misión trabaja con pruebas primero. */
+const hayPruebas = async ($: EngineInterface): Promise<boolean> => {
+  for (const f of ['pytest.ini', 'tox.ini', 'conftest.py', 'go.mod', 'Cargo.toml', 'phpunit.xml']) if (await $.fs.exists(f).catch(() => false)) return true
+  const pkg = await $.fs.read('package.json').then(r => (typeof r === 'string' ? r : ''), () => '')
+
+  return hayPruebasEnPackage(pkg)
 }
 
-const guardar = async ($: EngineInterface, i: Investigacion): Promise<string> => {
-  const archivo = `.claude/investigaciones/${slug(i.pregunta)}.md`
-  await $.fs.write(archivo, `# ${i.pregunta}\n\n${i.texto}\n`)
-  await update($, investigacion, v => (v === null ? v : { ...v, archivo }))
-
-  return archivo
+const empezar = async ($: EngineInterface, objetivo: string) => {
+  plan = []
+  ultimoSiguiente = null
+  repeticiones = 0
+  yaRevisado = false
+  veredicto = null
+  rondas = 0
+  sinVeredicto = 0
+  await update($, mision, () => ({ ...VACIA, activa: true, objetivo: recortar(limpiarEnvoltorios(objetivo), 160) }))
 }
 
-/** La pizarra de esta terminal: el mod terminales le pone nombre (T1, T2…); sin él, la de siempre. */
-const rutaPizarra = async ($: EngineInterface): Promise<string> => {
-  const t = await $.state.get({ plugin: 'terminales', key: 'estado' } as never).catch(() => undefined)
-
-  return pizarraDe((t as { value?: { yo?: { nombre?: string } | null } } | undefined)?.value?.yo?.nombre)
+const terminar = async ($: EngineInterface, motivo: string, aviso: string, revision?: Mision['revision']) => {
+  await update($, mision, m => ({ ...m, activa: false, fin: motivo, revision: revision ?? m.revision }))
+  $.ui.toast(aviso)
 }
-
-const guiaConLecciones = (aprendido: string[]): string => (aprendido.length === 0 ? GUIA : `${GUIA}\nLo que el equipo ya aprendió:\n${aprendido.map(l => `- ${l}`).join('\n')}`)
 
 export const register: Register = on => {
   // La guía tal como se mandó en esta sesión.
   let guiaFija: string | undefined
-  // La primera entrada de la pizarra de cada sesión la empieza de cero; las demás se escriben una a una.
-  let pizarraNueva = true
-  let colaPizarra: Promise<unknown> = Promise.resolve()
 
   // Lanzamientos en vuelo y en lo que va del turno del director (se cuentan sin esperar, para que los paralelos no se cuelen).
   let reservas = 0
@@ -89,47 +94,68 @@ export const register: Register = on => {
   // Agente de la autoprueba en curso.
   let pruebaId: string | undefined
 
-  // Obreros que terminaron desde la última revisión: si el revisor encuentra problemas, se les anota.
-  let obreros: { familia: string }[] = []
-
   on('session.start', async ($, e, next) => {
     guiaFija = undefined
-    pizarraNueva = true
     for (const spec of AGENTES) await $.agent.register(spec).catch(() => undefined)
     await $.command.register({
       name: 'equipo',
-      description: 'Equipo de agentes con modelos baratos: /equipo · on|off · olvidar · probar',
-      argumentHint: 'on|off|olvidar|probar',
+      description: 'Equipo de agentes con modelos baratos: /equipo · on|off · probar',
+      argumentHint: 'on|off|probar',
     })
     await $.command.register({
-      name: 'investigar',
-      description: 'Investiga en internet con un agente barato: /investigar <pregunta> · ver · guardar',
-      argumentHint: '<pregunta> | ver | guardar',
+      name: 'piloto',
+      description: 'Dile qué quieres lograr y se hace solo: /piloto <objetivo> · parar · auto on|off',
+      argumentHint: '<objetivo> | parar | auto on|off',
     })
-    const guardado = await $.store.get('aprendizaje').catch(() => undefined)
-    if (guardado !== null && typeof guardado === 'object' && !Array.isArray(guardado)) await update($, aprendizaje, () => guardado as Aprendizaje)
     if ((await $.store.get('isAuto').catch(() => undefined)) === false) await update($, isAuto, () => false)
+    if ((await $.store.get('pilotoAuto').catch(() => undefined)) === true) await update($, pilotoAuto, () => true)
 
     return next(e)
   })
 
-  // Tareas grandes y contexto lleno: una pista corta con el mensaje (fuera del prompt de sistema, para no romper la caché).
+  // Contexto lleno o presupuesto apretado: una pista corta con el mensaje (fuera del prompt de sistema, para no romper la caché).
+  // Y un pedido grande arranca una misión solo si el piloto automático está encendido.
   on('prompt.submit', async ($, e, next) => {
     const origen = (e.origin as { kind?: string } | undefined)?.kind
-    if ((origen !== undefined && !PERSONA.has(origen)) || !(await read($, isAuto))) return next(e)
-    const apretado = typeof (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax === 'number'
-    const usage = await $.session.usage().catch(() => null)
-    const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, tokens: usage?.context.tokens ?? 0, grande: esTareaGrande(e.text), hayPizarra: (await read($, agentes)).length > 0, apretado, pizarra: await rutaPizarra($) })
+    if (origen !== undefined && !PERSONA.has(origen)) return next(e)
+    const texto = limpiarEnvoltorios(e.text)
+    const extra: string[] = []
+    const nivelPresupuesto = (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.nivel ?? 'normal'
 
-    return next(pista === undefined ? e : { ...e, context: [...(e.context ?? []), pista] })
+    const m = await read($, mision)
+    if (m.activa && !texto.startsWith('/')) await update($, mision, x => ({ ...x, continuaciones: 0 }))
+    if (!m.activa && texto !== '' && nivelPresupuesto === 'normal' && (await read($, pilotoAuto)) && esTareaGrande(texto)) {
+      await empezar($, texto)
+      $.ui.toast('Piloto: lo llevo de principio a fin. Para frenarlo: /piloto parar')
+      extra.push(protocolo(texto, await hayPruebas($)))
+    }
+
+    if (await read($, isAuto)) {
+      const apretado = typeof (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax === 'number'
+      const usage = await $.session.usage().catch(() => null)
+      const pista = pistaDeEquipo({ contexto: usage?.context.percent ?? 0, tokens: usage?.context.tokens ?? 0, apretado })
+      if (pista !== undefined) extra.push(pista)
+    }
+
+    return next(extra.length === 0 ? e : { ...e, context: [...(e.context ?? []), ...extra] })
   }).catch(($, e, next) => next(e))
 
-  // Al compactar se conserva el plan y dónde están los resultados.
+  // Al compactar se conserva el plan.
   on('session.compact', async ($, e, next) => {
     guiaFija = undefined
-    const aviso = avisoCompactar(await rutaPizarra($))
 
-    return next({ ...e, instructions: e.instructions === undefined ? aviso : `${e.instructions}\n\n${aviso}` })
+    return next({ ...e, instructions: e.instructions === undefined ? AVISO_COMPACTAR : `${e.instructions}\n\n${AVISO_COMPACTAR}` })
+  }).catch(($, e, next) => next(e))
+
+  // El plan que Claude va marcando con TodoWrite es el avance de la misión.
+  on('tool.call', { tool: 'TodoWrite' }, async ($, e, next) => {
+    const ran = await next(e)
+    if (ran.deny !== undefined || e.agentId !== undefined) return ran
+    plan = e.todos.map(t => ({ texto: t.content, hecho: t.status === 'completed' }))
+    const r = resumenPlan(plan)
+    await update($, mision, m => ({ ...m, hechos: r.hechos, total: r.total, siguiente: r.siguiente }))
+
+    return ran
   }).catch(($, e, next) => next(e))
 
   // 1. El director sabe cómo repartir el trabajo.
@@ -137,7 +163,7 @@ export const register: Register = on => {
     const composed = await next(e)
     if (e.traits.includes('bare') || e.traits.includes('analysis') || !(await read($, isAuto))) return composed
     // El texto se fija al empezar (y tras compactar): un cambio en el prompt de sistema tira la caché de toda la conversación.
-    guiaFija ??= guiaConLecciones(lecciones(await read($, aprendizaje)))
+    guiaFija ??= GUIA
 
     return { sections: [...composed.sections, { id: 'equipo:guia', text: guiaFija, scope: 'session' }] }
   })
@@ -148,9 +174,7 @@ export const register: Register = on => {
     // El director trabaja con el modelo que puso el selector, que puede no ser el de la sesión.
     const nivelSel = (await $.state.get(selectorNivel).catch(() => undefined))?.value
     const padreFam = typeof nivelSel === 'number' ? familiaDeNivel(nivelSel) : familiaDe(e.parentModel ?? '')
-    let objetivo = omitir
-      ? undefined
-      : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: padreFam, fork: false, aprendido: (await read($, aprendizaje))[e.subagentType]?.nivel ?? undefined, dificultad: dificultadDe(e.description, e.prompt) })
+    let objetivo = omitir ? undefined : modeloParaAgente({ tipo: e.subagentType, pedido: e.model, padre: padreFam, fork: false, dificultad: dificultadDe(e.description, e.prompt) })
     // El tope del presupuesto vale también para los agentes, pida lo que pida quien los lanza.
     const tope = omitir ? undefined : (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.topeMax
     if (typeof tope === 'number') {
@@ -209,67 +233,63 @@ export const register: Register = on => {
     return lanzado
   }).catch(($, e, next) => next(e))
 
-  // 3. Lo que gastó cada agente y su respuesta.
+  // 3. Lo que gastó cada agente; y al terminar el turno del director, si la misión sigue, el siguiente paso.
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     const id = e.agentId
-    if (id === undefined) {
-      obreros = []
-      lanzadosEnTurno = 0
+    if (id !== undefined) {
+      const u = e.usage
+      if (u !== undefined) {
+        await update($, agentes, l =>
+          l.map(r =>
+            r.id === id
+              ? { ...r, nuevo: r.nuevo + num(u.input_tokens) + num(u.cache_creation_input_tokens), cache: r.cache + num(u.cache_read_input_tokens), escrito: r.escrito + num(u.output_tokens) }
+              : r,
+          ),
+        )
+      }
+      if (id === pruebaId) {
+        pruebaId = undefined
+        const ok = e.reason === 'answer' && typeof e.answer === 'string' && e.answer.trim() !== ''
+        $.ui.toast(ok ? 'equipo: autoprueba superada, el agente respondió.' : 'equipo: autoprueba falló, el agente no respondió.')
+      }
+      const fin = await $.clock.now()
+      const respuesta = typeof e.answer === 'string' ? Math.ceil(e.answer.length / 4) : 0
+      const lista = await update($, agentes, l => l.map(r => (r.id === id ? { ...r, estado: 'listo' as const, fin, respuesta } : r)))
+      // La respuesta del revisor, tras pedir la revisión, es el veredicto.
+      if (yaRevisado && typeof e.answer === 'string' && e.answer.trim() !== '' && lista.find(r => r.id === id)?.tipo === 'equipo:revisor' && (await read($, mision)).activa) {
+        veredicto = /TODO BIEN/.test(e.answer) ? 'ok' : 'problemas'
+      }
 
       return done
     }
 
-    const u = e.usage
-    if (u !== undefined) {
-      await update($, agentes, l =>
-        l.map(r =>
-          r.id === id
-            ? { ...r, nuevo: r.nuevo + num(u.input_tokens) + num(u.cache_creation_input_tokens), cache: r.cache + num(u.cache_read_input_tokens), escrito: r.escrito + num(u.output_tokens) }
-            : r,
-        ),
-      )
-    }
-    const esPrueba = id === pruebaId
-    if (esPrueba) {
-      pruebaId = undefined
-      const ok = e.reason === 'answer' && typeof e.answer === 'string' && e.answer.trim() !== ''
-      $.ui.toast(ok ? 'equipo: autoprueba superada, el agente respondió.' : 'equipo: autoprueba falló, el agente no respondió.')
-    }
-    const fin = await $.clock.now()
-    const respuesta = typeof e.answer === 'string' ? Math.ceil(e.answer.length / 4) : 0
-    const lista = await update($, agentes, l => l.map(r => (r.id === id ? { ...r, estado: 'listo' as const, fin, respuesta } : r)))
-    const reg = lista.find(r => r.id === id)
-    if (reg !== undefined) {
-      const bueno = esBueno(e.reason, e.answer, reg.tipo)
-      if (e.reason === 'answer' && typeof e.answer === 'string' && e.answer.trim() !== '' && !esPrueba) {
-        const hoy = new Date(fin).toISOString().slice(11, 16)
-        const entrada = entradaPizarra(reg.tipo, reg.descripcion, e.answer, hoy)
-        // Una a una: dos agentes que terminan a la vez no pisan la entrada del otro.
-        colaPizarra = colaPizarra.then(async () => {
-          const archivo = await rutaPizarra($)
-          const previa = pizarraNueva ? '' : await $.fs.read(archivo).then(r => (typeof r === 'string' ? r : ''), () => '')
-          pizarraNueva = false
-          await $.fs.write(archivo, sumarEntrada(previa, entrada)).catch(() => undefined)
-        })
-        await colaPizarra.catch(() => undefined)
+    lanzadosEnTurno = 0
+    const m = await read($, mision)
+    if (!m.activa) return done
+    const r = resumenPlan(plan)
+    repeticiones = r.siguiente !== null && r.siguiente === ultimoSiguiente ? repeticiones + 1 : 0
+    ultimoSiguiente = r.siguiente
+    const presupuesto = (await $.state.get(presupuestoEstado).catch(() => undefined))?.value?.nivel ?? 'normal'
+    const d = decidir({ activa: true, razon: e.reason, continuaciones: m.continuaciones, max: m.max, total: r.total, hechos: r.hechos, siguiente: r.siguiente, presupuesto, repeticiones, yaRevisado, veredicto, rondas, sinVeredicto })
+
+    if (d.accion === 'continuar') {
+      if (d.revision === true) {
+        if (yaRevisado && veredicto === null) sinVeredicto += 1
+        yaRevisado = true
+        veredicto = null
       }
-      // Una interrupción (Esc) o un error de la API no dicen nada de la calidad del agente: no se aprende de eso.
-      if (e.reason === 'answer') await recordar($, a => aprender(a, reg.tipo, reg.familia, bueno, costo(reg, reg.familia), ahorro(reg)))
-      if (reg.tipo === 'equipo:obrero') obreros = [...obreros, { familia: reg.familia }].slice(-3)
-      // El revisor encontró problemas en lo que hicieron los obreros: eso sí es un fallo de ellos.
-      if (reg.tipo === 'equipo:revisor' && bueno && typeof e.answer === 'string' && !/TODO BIEN/.test(e.answer) && obreros.length > 0) {
-        // Solo el último obrero: el problema puede ser del director o de cualquiera de los anteriores.
-        const culpables = obreros.slice(-1)
-        obreros = []
-        await recordar($, a => culpables.reduce((acc, o) => aprender(acc, 'equipo:obrero', o.familia, false, 0, 0, false), a))
+      if (d.correccion === true) {
+        rondas += 1
+        yaRevisado = false
+        veredicto = null
       }
-    }
-    const actual = await read($, investigacion)
-    if (actual !== null && actual.estado === 'trabajando' && actual.id === id) {
-      const texto = e.reason === 'answer' && typeof e.answer === 'string' ? e.answer.trim() : ''
-      await update($, investigacion, v => (v === null ? v : { ...v, estado: texto === '' ? ('fallo' as const) : ('listo' as const), texto }))
-      $.ui.toast(texto === '' ? 'equipo: la investigación no devolvió nada.' : 'equipo: investigación lista. Escribe /investigar ver para leerla.')
+      await update($, mision, x => ({ ...x, continuaciones: x.continuaciones + 1, revision: d.revision === true ? 'revisando' : d.correccion === true ? 'corrigiendo' : x.revision }))
+      void $.prompt.submit({ text: d.texto, wait: false } as never).catch(() => undefined)
+    } else if (d.accion === 'terminar') {
+      await terminar($, d.motivo, d.revision === 'aprobada' ? 'Piloto: terminé y el revisor lo aprobó.' : 'Piloto: terminé. Revisa el resumen.', d.revision)
+    } else if (d.accion === 'parar') {
+      await terminar($, d.motivo, `Piloto: paré (${d.motivo}).`)
     }
 
     return done
@@ -297,49 +317,38 @@ export const register: Register = on => {
         return { text: `Autoprueba: no se pudo lanzar un agente (${error instanceof Error ? error.message : String(error)}). El reparto automático no funcionará en esta sesión.` }
       }
     }
-    if (arg === 'olvidar') await recordar($, () => ({}))
     const auto = await read($, isAuto)
-    const aprendido = lecciones(await read($, aprendizaje))
 
-    return { text: [`Equipo ${auto ? 'activo' : 'apagado'}. ${resumenEquipo(await read($, agentes))}`, ...aprendido.map(l => `· ${l}`)].join('\n') }
+    return { text: `Equipo ${auto ? 'activo' : 'apagado'}. ${resumenEquipo(await read($, agentes))}` }
   })
 
-  on('command.run', { command: 'investigar' }, async ($, e) => {
+  on('command.run', { command: 'piloto' }, async ($, e) => {
     const arg = e.args.trim()
-    if (arg === '') return { text: 'Uso: /investigar <qué quieres saber> · ver · guardar' }
+    const baja = arg.toLowerCase()
+    if (baja === 'parar' || baja === 'stop') {
+      await terminar($, 'lo paraste tú', 'Piloto: parado.')
 
-    if (arg.toLowerCase() === 'ver') {
-      const v = await read($, investigacion)
-      if (v === null) return { text: 'Aún no hay investigaciones.' }
-
-      return { text: v.estado === 'trabajando' ? `Sigo investigando: ${v.pregunta}` : v.estado === 'fallo' ? 'La última investigación falló.' : `# ${v.pregunta}\n\n${v.texto}` }
+      return { text: 'Piloto parado. Lo que quedó hecho se queda; lo demás lo sigues tú.' }
     }
+    if (baja === 'auto on' || baja === 'auto off') {
+      await update($, pilotoAuto, () => baja === 'auto on')
+      await $.store.set('pilotoAuto', baja === 'auto on').catch(() => undefined)
 
-    if (arg.toLowerCase() === 'guardar') {
-      const actual = await read($, investigacion)
-      if (actual === null || actual.estado !== 'listo') return { text: 'No hay una investigación lista para guardar.' }
-
-      return { text: `Guardada en ${await guardar($, actual)}.` }
+      return { text: `Piloto automático ${baja === 'auto on' ? 'activo: los pedidos grandes se llevan solos' : 'apagado: solo arranca con /piloto <objetivo>'}.` }
     }
+    if (arg === '') {
+      const m = await read($, mision)
+      const auto = await read($, pilotoAuto)
 
-    const antes = await read($, investigacion)
-    if (antes !== null && antes.estado === 'trabajando' && (await $.clock.now()) - antes.at < INVESTIGAR_MAX_MS) return { text: `Ya estoy investigando: ${antes.pregunta}. Espera a que termine.` }
-    const ahora = await $.clock.now()
-    const nueva: Investigacion = { id: '', pregunta: arg, at: ahora, estado: 'trabajando', texto: '', archivo: null }
-    await update($, investigacion, () => nueva)
-    try {
-      const r = await lanzar($, { prompt: arg, description: `Investigar: ${arg.slice(0, 40)}`, subagentType: 'equipo:investigador', model: 'haiku' })
-      if (r.deny !== undefined) throw new Error(r.deny)
-      const agentId = r.agentId ?? ''
-      await update($, investigacion, v => (v === null ? v : { ...v, id: agentId }))
-    } catch (error) {
-      await update($, investigacion, v => (v === null ? v : { ...v, estado: 'fallo' as const }))
-      // Sin agente, Claude lo hace con sus propias herramientas.
-      await $.prompt.fill({ text: `Investiga en internet y respóndeme con fuentes: ${arg}` }).catch(() => undefined)
-
-      return { text: `No pude lanzar el investigador (${error instanceof Error ? error.message : String(error)}); dejé la pregunta lista para enviar.` }
+      return {
+        text: m.activa
+          ? `Piloto en marcha: ${m.objetivo} · ${m.hechos} de ${m.total} pasos · siguió solo ${m.continuaciones}/${m.max} veces.`
+          : `Piloto ${auto ? 'en automático' : 'solo manual'}. ${m.fin !== '' ? `La última misión terminó: ${m.fin}.` : 'Escribe /piloto <qué quieres lograr>.'}`,
+      }
     }
+    await empezar($, arg)
+    void $.prompt.submit({ text: `${limpiarEnvoltorios(arg)}\n\n${protocolo(arg, await hayPruebas($))}`, wait: false } as never).catch(() => undefined)
 
-    return { text: 'Investigando con un agente barato (Haiku). Te aviso cuando termine; léelo con /investigar ver.' }
+    return { text: 'Piloto en marcha. Planea, reparte con el equipo y avanza solo; te aviso al terminar. /piloto parar lo frena.' }
   })
 }

@@ -21,37 +21,26 @@ export type Registro = {
   respuesta?: number
 }
 
-export type Investigacion = {
-  id: string
-  pregunta: string
-  at: number
-  estado: 'trabajando' | 'listo' | 'fallo'
-  texto: string
-  /** Si ya se guardó en el proyecto, dónde. */
-  archivo: string | null
-}
+export type Paso = { texto: string; hecho: boolean }
 
-/** Lo que el equipo aprendió de un tipo de agente. */
-export type Ruta = {
-  /** Modelo que se le pone ahora, si el equipo decidió cambiarlo; vacío = el de siempre. */
-  nivel: 'haiku' | 'sonnet' | 'opus' | null
-  /** Últimos resultados con el modelo actual: true = bien. */
-  recientes: boolean[]
-  /** Aciertos seguidos desde el último cambio. */
-  seguidos: number
-  /** Cuántas veces trabajó y cuántos tokens (ponderados) gastó en total. */
-  veces: number
-  unidades: number
-  /** Cuántas veces el equipo lo subió de nivel. */
-  subidas: number
-  /** Ahorro neto acumulado (unidades), ya descontado el costo de delegar. */
-  neto: number
+/** El avance de una misión del piloto. */
+export type Mision = {
+  activa: boolean
+  objetivo: string
+  hechos: number
+  total: number
+  siguiente: string | null
+  /** Cuántas veces el piloto siguió solo, y el tope. */
+  continuaciones: number
+  max: number
+  /** Por qué terminó o paró la última misión (vacío mientras corre). */
+  fin: string
+  /** La revisión final: sin empezar, en marcha, aprobada o con observaciones que quedaron. */
+  revision: 'sin revisar' | 'revisando' | 'corrigiendo' | 'aprobada' | 'con observaciones'
 }
-
-export type Aprendizaje = Record<string, Ruta>
 
 declare module 'claude-code' {
   interface PluginState {
-    equipo: { agentes: Registro[]; investigacion: Investigacion | null; isAuto: boolean; aprendizaje: Aprendizaje }
+    equipo: { agentes: Registro[]; isAuto: boolean; mision: Mision; pilotoAuto: boolean }
   }
 }

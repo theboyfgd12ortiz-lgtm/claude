@@ -1,8 +1,0 @@
-{
-  "name": "traspaso",
-  "description": "Guarda solo el progreso cuando la conversación se llena, para seguir en una limpia sin perder nada. El panel te avisa y tiene el botón Retomar. (/guardar y /retomar también existen.)",
-  "author": {
-    "name": "theboyfgd12ortiz-lgtm"
-  },
-  "types": "./types/index.d.ts"
-}

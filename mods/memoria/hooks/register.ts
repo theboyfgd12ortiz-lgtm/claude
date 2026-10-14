@@ -1,11 +1,15 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
+import type { Nota } from '../types'
 import { aceptar, ARCHIVO, contarNotas, PEDIDO, SECCION, sinCabecera, tocaActualizar } from './notas'
+import { ARCHIVO as ARCHIVO_TRASPASO, ARCHIVO_RAIZ, mensajeRetomar, PEDIDO as PEDIDO_TRASPASO, resumenDe, sinFecha, tocaGuardar } from './traspaso'
 
 const estado = atom({ plugin: 'memoria', key: 'notas' } as const, 0)
 const isAuto = atom({ plugin: 'memoria', key: 'isAuto' } as const, true)
 const cuando = atom({ plugin: 'memoria', key: 'at' } as const, 0)
+const traspaso = atom({ plugin: 'memoria', key: 'traspaso' } as const, null)
+const traspasoAuto = atom({ plugin: 'memoria', key: 'traspasoAuto' } as const, true)
 
 // Lo que se lee al empezar: se guarda aquí para no leer el archivo en cada petición.
 let notas = ''
@@ -13,6 +17,8 @@ let notas = ''
 let notasFijas = ''
 let ediciones = 0
 let ultimo = 0
+let ultimoTraspaso = 0
+let porcientoUltimo = 0
 
 const cargar = async ($: EngineInterface) => {
   const t = await $.fs.read(ARCHIVO).catch(() => null)
@@ -40,13 +46,73 @@ const actualizar = async ($: EngineInterface): Promise<'guardado' | 'sin cambios
   return 'guardado'
 }
 
+/** Lee la nota de la carpeta de trabajo y la publica para el panel. */
+const leerNota = async ($: EngineInterface): Promise<Nota | null> => {
+  for (const ruta of [ARCHIVO_TRASPASO, ARCHIVO_RAIZ]) {
+    const texto = await $.fs.read(ruta).catch(() => null)
+    if (texto === null || texto.includes('descartada')) continue
+    const fecha = Date.parse(texto.match(/<!-- traspaso (\S+?)( auto)? -->/)?.[1] ?? '')
+
+    return {
+      at: Number.isNaN(fecha) ? 0 : fecha,
+      donde: ruta,
+      resumen: resumenDe(texto),
+      isAuto: /<!-- traspaso \S+ auto -->/.test(texto),
+    }
+  }
+
+  return null
+}
+
+const publicar = async ($: EngineInterface) => {
+  const actual = await leerNota($)
+  await update($, traspaso, () => actual)
+
+  return actual
+}
+
+/** Resume la conversación con un fork (reutiliza la caché) y la guarda; devuelve dónde, o un texto de error. */
+const guardarNota = async ($: EngineInterface, extra: string, auto: boolean): Promise<{ donde: string } | { error: string }> => {
+  const r = await $.model.fork({ prompt: extra === '' ? PEDIDO_TRASPASO : `${PEDIDO_TRASPASO}\n\nTen en cuenta también: ${extra}` })
+  if (!r.isAnswered) {
+    return { error: r.reason === 'nothing-to-fork' ? 'Todavía no hay nada que guardar en esta conversación.' : `No pude resumir ahora (${r.reason}).` }
+  }
+  const ahora = await $.clock.now()
+  const contenido = `<!-- traspaso ${new Date(ahora).toISOString()}${auto ? ' auto' : ''} -->\n\n${r.text.trim()}\n`
+  let donde = ARCHIVO_TRASPASO
+  try {
+    await $.fs.write(ARCHIVO_TRASPASO, contenido)
+  } catch {
+    try {
+      await $.fs.write(ARCHIVO_RAIZ, contenido)
+      donde = ARCHIVO_RAIZ
+    } catch {
+      return { error: `No pude escribir la nota en esta carpeta. Aquí está:\n\n${r.text.trim()}` }
+    }
+  }
+  ultimoTraspaso = ahora
+  await publicar($)
+
+  return { donde }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'memoria', description: 'Las notas que Claude recuerda de este proyecto: /memoria · actualizar · borrar · on · off', argumentHint: 'actualizar | borrar | on | off' })
     if ((await $.store.get('isAuto').catch(() => undefined)) === false) await update($, isAuto, () => false)
+    await $.command.register({
+      name: 'guardar',
+      description: 'Guarda el progreso en .claude/traspaso.md (también se guarda solo cuando la charla se llena)',
+      argumentHint: '[nota extra opcional]',
+    })
+    await $.command.register({ name: 'retomar', description: 'Continúa el trabajo guardado' })
+    if ((await $.store.get('traspasoAuto').catch(() => undefined)) === false) await update($, traspasoAuto, () => false)
     ediciones = 0
     ultimo = await $.clock.now()
+    ultimoTraspaso = 0
+    porcientoUltimo = 0
     await cargar($)
+    try { await publicar($) } catch (err) { console.log("PUBERR", String(err)) }
 
     return next(e)
   })
@@ -62,6 +128,8 @@ export const register: Register = on => {
   on('classic.SessionStart', async ($, e, next) => {
     const r = await next(e)
     await cargar($)
+    // Tras un /clear no hay session.start: se vuelve a mirar la carpeta para que el panel ofrezca retomar.
+    await publicar($)
 
     return r
   }).catch(($, e, next) => next(e))
@@ -76,12 +144,31 @@ export const register: Register = on => {
   // Tras un trabajo de verdad (varias ediciones), se actualizan las notas sin esperar a nadie.
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (e.agentId !== undefined || e.reason !== 'answer' || !(await read($, isAuto))) return done
-    const ahora = await $.clock.now()
-    if (!tocaActualizar({ ediciones, ahora, ultimo })) return done
-    ediciones = 0
-    ultimo = ahora
-    void actualizar($).catch(() => undefined)
+    if (e.agentId !== undefined || e.reason !== 'answer') return done
+
+    // Tras un trabajo de verdad (varias ediciones), se actualizan las notas sin esperar a nadie.
+    if (await read($, isAuto)) {
+      const ahora = await $.clock.now()
+      if (tocaActualizar({ ediciones, ahora, ultimo })) {
+        ediciones = 0
+        ultimo = ahora
+        void actualizar($).catch(() => undefined)
+      }
+    }
+
+    // Guardado automático del progreso: al terminar una respuesta con la conversación ya larga.
+    if (await read($, traspasoAuto)) {
+      const uso = await $.session.usage().catch(() => null)
+      const ahora = await $.clock.now()
+      const porciento = uso?.context.percent
+      if (tocaGuardar({ porciento, tokens: uso?.context.tokens, ahora, ultimo: ultimoTraspaso, porcientoUltimo })) {
+        porcientoUltimo = porciento ?? 0
+        // Fuera de este turno: guardar no demora la respuesta ni su aviso.
+        void guardarNota($, '', true).then(r => {
+          if ('donde' in r) $.ui.toast('Tu conversación ya está larga: guardé el progreso. Cuando quieras empezar limpio, usa el botón del panel.')
+        })
+      }
+    }
 
     return done
   }).catch(($, e, next) => next(e))
@@ -109,5 +196,42 @@ export const register: Register = on => {
     }
 
     return { text: notas.trim() === '' ? 'Todavía no hay notas de este proyecto. Se apuntan solas después de un trabajo importante.' : `Lo que recuerdo de este proyecto (${ARCHIVO}):\n${notas}` }
+  })
+
+  on('command.run', { command: 'guardar' }, async ($, e) => {
+    const r = await guardarNota($, e.args.trim(), false)
+    if ('error' in r) return { text: r.error }
+    $.ui.toast('Guardado. Para seguir en una charla limpia: /clear y luego /retomar (o el botón del panel).')
+
+    return { text: `Nota guardada en ${r.donde}. Ahora puedes escribir /clear (conversación nueva, mucho más barata) y luego /retomar.` }
+  })
+
+  on('command.run', { command: 'retomar' }, async $ => {
+    let texto: string | null = null
+    for (const ruta of [ARCHIVO_TRASPASO, ARCHIVO_RAIZ]) {
+      texto = await $.fs.read(ruta).catch(() => null)
+      if (texto !== null) break
+    }
+    if (texto === null) return { text: `No hay nota guardada en esta carpeta (${ARCHIVO_TRASPASO}). Usa /guardar primero.` }
+    await $.prompt.fill({ text: mensajeRetomar(sinFecha(texto)) })
+
+    return { text: 'Dejé la nota en el cuadro de mensaje: revísala y pulsa Enter para continuar.' }
+  })
+
+  // Descartar la nota (botón del panel): se borra el archivo y deja de ofrecerse.
+  on('command.run', { command: 'traspaso' }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    if (arg === 'descartar') {
+      for (const ruta of [ARCHIVO_TRASPASO, ARCHIVO_RAIZ]) await $.fs.write(ruta, '<!-- traspaso 1970-01-01T00:00:00.000Z descartada -->\n').catch(() => undefined)
+      await update($, traspaso, () => null)
+
+      return { text: 'Nota descartada.' }
+    }
+    if (arg === 'off' || arg === 'on') {
+      await update($, traspasoAuto, () => arg === 'on')
+      await $.store.set('traspasoAuto', arg === 'on').catch(() => undefined)
+    }
+
+    return { text: `Guardado automático ${(await read($, traspasoAuto)) ? 'activo' : 'apagado'}.` }
   })
 }

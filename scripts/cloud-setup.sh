@@ -7,7 +7,6 @@
 #   git clone --depth 1 https://github.com/theboyfgd12ortiz-lgtm/claude.git /tmp/cm && bash /tmp/cm/scripts/cloud-setup.sh 2>&1 | tee /tmp/claude-mods-setup.log
 #
 # Variables opcionales: CLAUDE_MODS_REPO_URL, CLAUDE_MODS_DIR (carpeta destino), RTK_VERSION,
-# SKIP_RTK=1, SKIP_CAVEMAN=1, SKIP_HUMANIZER=1, SKIP_PONYTAIL=1, SKIP_TOKEN_OPTIMIZER=1
 set -u
 
 REPO_URL="${CLAUDE_MODS_REPO_URL:-https://github.com/theboyfgd12ortiz-lgtm/claude.git}"
@@ -39,7 +38,6 @@ fetch claude "$REPO_URL" && for d in "$DEST"/claude/mods/*/; do add_dir "${d%/}"
 
 # --- 2. Plugins de terceros, desde su repositorio original ---
 [ "${SKIP_CAVEMAN:-0}" = "1" ] || { fetch caveman https://github.com/JuliusBrussee/caveman.git && add_dir "$DEST/caveman"; }
-[ "${SKIP_PONYTAIL:-0}" = "1" ] || { fetch ponytail https://github.com/DietrichGebert/ponytail.git && add_dir "$DEST/ponytail"; }
 [ "${SKIP_HUMANIZER:-0}" = "1" ] || { fetch humanizer https://github.com/blader/humanizer.git && add_dir "$DEST/humanizer"; }
 [ "${SKIP_TOKEN_OPTIMIZER:-0}" = "1" ] || { fetch token-optimizer https://github.com/alexgreensh/token-optimizer.git && add_dir "$DEST/token-optimizer"; }
 

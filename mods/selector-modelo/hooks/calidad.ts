@@ -1,11 +1,4 @@
-// Pure text and predicates: no `$`, so tests can call them directly.
-
-export const RULES = `# Working rules (quality-coach)
-- Understand first: read the relevant code, its callers and the project's conventions before changing anything. Ask only when a decision is genuinely the user's.
-- Make the smallest change that fully solves the task, in the surrounding style. No unrequested refactors, no placeholder or half-done code.
-- Verify before saying it is done: run the project's tests, linter, typecheck or build, or reproduce the behaviour. Report real results, failures included.
-- Spend tokens where they count: search (Grep/Glob) before reading, read only the line ranges you need, never re-read an unchanged file, and pipe long command output through head, tail or grep. Do not paste code or file contents back to the user unless asked.
-- Finish with the outcome first, then what changed and how it was verified, briefly. Reply in the user's language.`
+// Comprobaciones puras de calidad: sin `$`, para probarlas directamente.
 
 export const COMPACT_HINT = `Keep in the summary: the user's goal, constraints and stated preferences; every file created or modified (path) and why; decisions taken and approaches rejected, with the reason; the commands that verify the work and their latest results; errors still open; the remaining steps. Leave out raw file contents and long tool outputs already acted on.`
 

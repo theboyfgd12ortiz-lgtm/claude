@@ -1,8 +1,0 @@
-{
-  "name": "mejorar-prompt",
-  "description": "Mejora tus pedidos solo: si escribes algo corto y vago, Claude pregunta lo que falta (o dice sus supuestos) antes de construir. El panel tiene el botón \"Mejorar mi borrador\" (también /mejorar).",
-  "author": {
-    "name": "theboyfgd12ortiz-lgtm"
-  },
-  "types": "./types/index.d.ts"
-}

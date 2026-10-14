@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { isCodeFile, isVerification, runsEdited } from './rules'
+import { isCodeFile, isVerification, runsEdited } from '../hooks/calidad'
 
 test('tells code from docs', () => {
   expect(isCodeFile('/r/src/app.ts')).toBe(true)
@@ -24,7 +24,7 @@ test('adds its rules to the system prompt', async ($, on) => {
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'hi', scope: 'shared' as const }] }))
   const composed = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] })
   const ids = composed.sections.map(s => s.id)
-  expect(ids).toContain('quality-coach:rules')
+  expect(ids).toContain('selector-modelo:reglas')
 })
 
 test('running the edited file counts as checking it', () => {
