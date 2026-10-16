@@ -21,7 +21,7 @@ Lo decidido y lo descartado, con el porqué en una línea.
 Los siguientes pasos, en orden.
 ## Datos clave
 Comandos que funcionan, nombres, URLs o valores que no hay que volver a buscar.
-No incluyas código completo ni salidas largas. Responde solo con la nota.`
+No incluyas código completo ni salidas largas. Usa solo lo que ya está en la conversación, sin abrir archivos ni usar herramientas. Responde solo con la nota.`
 
 /** El mensaje que retoma el trabajo a partir de la nota. */
 export const mensajeRetomar = (nota: string): string =>

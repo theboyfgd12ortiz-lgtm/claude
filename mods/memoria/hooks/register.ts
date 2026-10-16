@@ -201,7 +201,13 @@ export const register: Register = on => {
 
   on('command.run', { command: 'guardar' }, async ($, e) => {
     const r = await guardarNota($, e.args.trim(), false)
-    if ('error' in r) return { text: r.error }
+    if ('error' in r) {
+      if (r.error.startsWith('Todavía')) return { text: r.error }
+      // El resumen aparte falló (error de la API, conversación muy larga): que lo escriba Claude en la conversación.
+      await $.prompt.fill({ text: `${PEDIDO_TRASPASO.replace(' Usa solo lo que ya está en la conversación, sin abrir archivos ni usar herramientas.', '').replace(' Responde solo con la nota.', '')}\n\nGuárdala con la herramienta Write en ${ARCHIVO_TRASPASO}, empezando con la línea <!-- traspaso ${new Date(await $.clock.now()).toISOString()} -->${e.args.trim() === '' ? '' : `\nTen en cuenta también: ${e.args.trim()}`}` })
+
+      return { text: 'El resumen automático falló. Dejé el pedido en el cuadro de mensaje: pulsa Enter y Claude guarda la nota.' }
+    }
     $.ui.toast('Guardado. Para seguir en una charla limpia: /clear y luego /retomar (o el botón del panel).')
 
     return { text: `Nota guardada en ${r.donde}. Ahora puedes escribir /clear (conversación nueva, mucho más barata) y luego /retomar.` }

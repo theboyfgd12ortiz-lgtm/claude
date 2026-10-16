@@ -95,3 +95,19 @@ test('sin conversación no hay nada que guardar', async ($, on) => {
   const r = await $.command.run({ command: 'guardar', args: '', ...CMD } as never)
   expect(r.text).toMatch(/Todavía no hay nada/)
 })
+
+test('si el resumen falla por la API, /guardar deja el pedido en el cuadro para que Claude la escriba', async ($, on) => {
+  mock.clock(on)
+  on('model.fork', () => ({ value: { isAnswered: false, reason: 'api-error', usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }) as never)
+  let cuadro = ''
+  on('prompt.fill', ((_$: unknown, e: { text: string }) => {
+    cuadro = e.text
+
+    return { isFilled: true }
+  }) as never)
+  const r = await $.command.run({ command: 'guardar', args: '', ...CMD } as never)
+  expect(r.text).toMatch(/pulsa Enter/)
+  expect(cuadro).toMatch(/## Objetivo/)
+  expect(cuadro).toMatch(/Write en \.claude\/traspaso\.md/)
+  expect(cuadro).not.toMatch(/sin abrir archivos/)
+})
