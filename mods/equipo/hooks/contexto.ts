@@ -18,5 +18,28 @@ export const pistaDeEquipo = (a: { contexto: number; tokens?: number; apretado?:
   return lineas.length === 0 ? undefined : `<equipo>${lineas.join(' ')}</equipo>`
 }
 
+/** Lo que el director lleva hecho a mano en el turno actual; cada aviso sale una vez por turno. */
+export type Trabajo = { lecturas: number; caracteres: number; ediciones: number; avisadoLeer: boolean; avisadoEditar: boolean }
+export const trabajoNuevo = (): Trabajo => ({ lecturas: 0, caracteres: 0, ediciones: 0, avisadoLeer: false, avisadoEditar: false })
+export const LIMITE = { lecturas: 5, caracteres: 60_000, ediciones: 6 } as const
+
+/** Aviso para el director caro cuando ya leyó o editó mucho él mismo en este turno, o undefined. */
+export const avisoDeTrabajo = (t: Trabajo): { tipo: 'leer' | 'editar'; texto: string } | undefined => {
+  if (!t.avisadoLeer && (t.lecturas >= LIMITE.lecturas || t.caracteres >= LIMITE.caracteres)) {
+    return {
+      tipo: 'leer',
+      texto: `<equipo>Llevas ${t.lecturas} lecturas (~${Math.round(t.caracteres / 4000)}k tokens) en este turno con el modelo caro. Lo que falte por leer o buscar, mándalo a equipo:explorador (Haiku) y pide solo rutas, líneas y conclusiones.</equipo>`,
+    }
+  }
+  if (!t.avisadoEditar && t.ediciones >= LIMITE.ediciones) {
+    return {
+      tipo: 'editar',
+      texto: `<equipo>Llevas ${t.ediciones} ediciones en este turno con el modelo caro. Si lo que queda es repetir el mismo tipo de cambio o escribir código de relleno, escribe la especificación exacta (archivos, qué cambiar, cómo comprobarlo) y dásela a equipo:mecanico (Haiku); tú revisa el resultado.</equipo>`,
+    }
+  }
+
+  return undefined
+}
+
 /** Qué debe sobrevivir a una compactación. */
 export const AVISO_COMPACTAR = 'Conserva el plan y qué pasos están hechos o pendientes.'

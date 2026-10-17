@@ -47,6 +47,7 @@ export const MODELO_POR_TIPO: Record<string, 'haiku' | 'sonnet'> = {
   'equipo:explorador': 'haiku',
   'equipo:investigador': 'haiku',
   'equipo:obrero': 'sonnet',
+  'equipo:mecanico': 'haiku',
   'equipo:revisor': 'sonnet',
   'equipo:arreglador': 'sonnet',
   // Explore de siempre heredaría el costo del director. general-purpose no se toca: lo suele lanzar quien ya decidió que la tarea es difícil.
@@ -141,6 +142,22 @@ ${FORMATO}`,
     maxTurns: 30,
   },
   {
+    name: 'mecanico',
+    description: 'Hace trabajo mecánico que no requiere pensar: código repetitivo, el mismo cambio en muchos archivos, renombrar, pasar datos de un formato a otro, rellenar listas o textos ya decididos. Dale la especificación exacta.',
+    prompt: `Eres el mecánico del equipo. Recibes una especificación exacta y la aplicas tal cual, rápido y sin inventar.
+- No tomas decisiones de diseño ni de lógica: si la especificación es ambigua o algo no encaja con lo que ves en el código, detente y dilo en vez de adivinar.
+- Copia el estilo del código que ya existe. No cambies nada que no esté en la especificación.
+- Al terminar, comprueba lo que te pidieron (el comando de prueba si te lo dieron; si no, vuelve a leer lo que cambiaste).
+- Responde con máximo 80 palabras: archivos cambiados, cómo lo comprobaste y lo que no pudiste hacer.
+${FORMATO}`,
+    tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash'],
+    disallowedTools: ['Agent'],
+    model: 'haiku',
+    effort: 'low',
+    maxTurns: 30,
+    omitClaudeMd: true as const,
+  },
+  {
     name: 'arreglador',
     description: 'Arregla una prueba, compilación o lint que falla: dale el comando y el error. Hace el arreglo mínimo y lo vuelve a correr hasta que pase.',
     prompt: `Eres el arreglador del equipo. Recibes un comando que falla y su error, y lo dejas funcionando.
@@ -174,11 +191,12 @@ ${FORMATO}`,
 
 /** Cómo debe repartir el trabajo el director (se añade al prompt de sistema). */
 export const GUIA = `# Equipo de trabajo (para gastar poco y hacerlo bien)
-Tú diriges (si la tarea es grande, planifica antes en pasos cortos). Para trabajo grande reparte lo pesado entre agentes más baratos; lo pequeño hazlo tú.
+Tú diriges con el modelo caro: úsalo para pensar (entender, planear, decidir, revisar). Lo que no requiere razonar va a un agente barato: leer muchos archivos, código repetitivo, el mismo cambio en varios archivos, datos y relleno. Lo pequeño (un archivo, unas líneas) hazlo tú.
 1. Reparte con la herramienta Agent:
 - equipo:explorador (Haiku): buscar o leer en muchos archivos. Pídele rutas y líneas, no archivos enteros.
 - equipo:investigador (Haiku): buscar en internet; devuelve resumen con fuentes.
-- equipo:obrero (Sonnet): hacer UN paso claro. Dale una especificación completa y autosuficiente (archivos, qué cambiar, cuándo está listo): no ve esta conversación.
+- equipo:mecanico (Haiku): trabajo mecánico ya decidido. Dale la especificación exacta (archivos, antes y después, cómo comprobarlo) y revisa lo que devuelve.
+- equipo:obrero (Sonnet): hacer UN paso claro que pide algo de criterio. Dale una especificación completa y autosuficiente (archivos, qué cambiar, cuándo está listo): no ve esta conversación.
 - equipo:arreglador (Sonnet): cuando una prueba, compilación o lint falla: dale el comando y el error.
 - equipo:revisor (Sonnet): solo si cambiaste 3 o más archivos de código; en cambios pequeños revisa tú.
 2. Lanza en paralelo lo independiente (varias llamadas Agent en el mismo mensaje).

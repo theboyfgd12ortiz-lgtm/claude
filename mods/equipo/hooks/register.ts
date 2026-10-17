@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Mision, Paso, Registro } from '../types'
-import { AVISO_COMPACTAR, pistaDeEquipo } from './contexto'
+import { AVISO_COMPACTAR, avisoDeTrabajo, pistaDeEquipo, trabajoNuevo } from './contexto'
 import { decidir, esTareaGrande, hayPruebasEnPackage, limpiarEnvoltorios, MAX_CONTINUACIONES, planDeTexto, protocolo, recortar, resumenPlan, unirPlan } from './mision'
 import { AGENTES, ahorro, dificultadDe, familiaDe, familiaDeNivel, rango, GUIA, modeloParaAgente } from './reglas'
 
@@ -54,6 +54,8 @@ const lanzar = async ($: EngineInterface, args: Parameters<EngineInterface['agen
 let plan: Paso[] = []
 // Si TodoWrite dio el plan, las listas con casillas del texto no lo tocan.
 let planDeTodoWrite = false
+// Lo que el director lleva leído y editado él mismo en el turno actual.
+let trabajo = trabajoNuevo()
 let ultimoSiguiente: string | null = null
 let repeticiones = 0
 let yaRevisado = false
@@ -119,6 +121,7 @@ export const register: Register = on => {
   // Contexto lleno o presupuesto apretado: una pista corta con el mensaje (fuera del prompt de sistema, para no romper la caché).
   // Y un pedido grande arranca una misión solo si el piloto automático está encendido.
   on('prompt.submit', async ($, e, next) => {
+    trabajo = trabajoNuevo()
     const origen = (e.origin as { kind?: string } | undefined)?.kind
     if (origen !== undefined && !PERSONA.has(origen)) return next(e)
     const texto = limpiarEnvoltorios(e.text)
@@ -148,6 +151,32 @@ export const register: Register = on => {
     guiaFija = undefined
 
     return next({ ...e, instructions: e.instructions === undefined ? AVISO_COMPACTAR : `${e.instructions}\n\n${AVISO_COMPACTAR}` })
+  }).catch(($, e, next) => next(e))
+
+  // El director caro no debe gastar el turno leyendo o repitiendo ediciones él mismo: se le avisa en el momento, junto al resultado.
+  on('tool.call', async ($, e, next) => {
+    const ran = await next(e)
+    if (e.agentId !== undefined || ran.deny !== undefined || !(await read($, isAuto))) return ran
+    const tool = String(e.tool)
+    const salida = (ran.text ?? '').length
+    if (tool === 'Read' || tool === 'Grep' || tool === 'Glob') {
+      trabajo.lecturas += 1
+      trabajo.caracteres += salida
+    } else if (tool === 'Bash' || tool === 'PowerShell') {
+      trabajo.caracteres += salida
+    } else if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit' || tool === 'NotebookEdit') {
+      trabajo.ediciones += 1
+    } else {
+      return ran
+    }
+    const nivelSel = (await $.state.get(selectorNivel).catch(() => undefined))?.value
+    if (typeof nivelSel === 'number' && familiaDeNivel(nivelSel) === 'haiku') return ran
+    const aviso = avisoDeTrabajo(trabajo)
+    if (aviso === undefined) return ran
+    if (aviso.tipo === 'leer') trabajo.avisadoLeer = true
+    else trabajo.avisadoEditar = true
+
+    return { ...ran, context: [...(ran.context ?? []), aviso.texto] }
   }).catch(($, e, next) => next(e))
 
   // El plan que Claude va marcando con TodoWrite es el avance de la misión.
