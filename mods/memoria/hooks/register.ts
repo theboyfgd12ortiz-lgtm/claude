@@ -174,6 +174,13 @@ export const register: Register = on => {
     return done
   }).catch(($, e, next) => next(e))
 
+  // Antes de compactar (sola o con /compact) se guarda la nota: así siempre se puede retomar en un chat nuevo.
+  on('session.compact', async ($, e, next) => {
+    if (e.trigger !== 'precompute' && (await read($, traspasoAuto))) await guardarNota($, '', true).catch(() => undefined)
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   on('command.run', { command: 'memoria' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
     if (arg === 'borrar') {

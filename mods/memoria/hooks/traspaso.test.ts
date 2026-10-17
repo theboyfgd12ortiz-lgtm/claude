@@ -111,3 +111,26 @@ test('si el resumen falla por la API, /guardar deja el pedido en el cuadro para 
   expect(cuadro).toMatch(/Write en \.claude\/traspaso\.md/)
   expect(cuadro).not.toMatch(/sin abrir archivos/)
 })
+
+test('antes de compactar guarda la nota sola', async ($, on) => {
+  mock.clock(on)
+  const archivos = new Map<string, string>()
+  let compactado = false
+  on('model.fork', () => ({ value: OK }) as never)
+  on('fs.read', () => {
+    throw new Error('no existe')
+  })
+  on('fs.write', (_$, e) => {
+    archivos.set(quitarRuta((e as { path: string }).path), (e as { text: string }).text)
+
+    return { value: undefined } as never
+  })
+  on('session.compact', () => {
+    compactado = true
+
+    return { skip: 'prueba' } as never
+  })
+  await $.session.compact({ messages: [] } as never)
+  expect(compactado).toBe(true)
+  expect(archivos.get(ARCHIVO)).toMatch(/Landing de la panadería/)
+})

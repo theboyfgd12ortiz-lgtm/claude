@@ -24,9 +24,9 @@
 - /guardar: si el resumen aparte falla (error de API), deja el pedido en el cuadro de mensaje para que Claude escriba la nota.
 - equipo: agente mecanico (Haiku) para trabajo ya decidido; vigilante avisa al director tras 5 lecturas, ~15k tokens leídos o 6 ediciones por turno. Contador de tamaño con respaldo si falta el texto del resultado (probado).
 - Medición de 14 días (544 transcripciones): ~92% del gasto es Opus en el chat principal; las llamadas con más de 300k de contexto son ~64% del total. Subagentes ~8%. Lo que más ahorra: chats más cortos, no más delegación.
+- Chats cortos: CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000 en ~/.claude/settings.json (compacta solo cerca de 200k); memoria guarda la nota de traspaso antes de cada compactación.
 
 ## Pendiente
-- Decidir con ortiz cómo cortar los chats largos (compactar solo a cierto tamaño).
 - ortiz: reiniciar Claude Code y comprobar /mods y que Claude recuerde sus proyectos en un chat sin carpeta.
 - OpenCode: cerrado por pedido de ortiz.
 
