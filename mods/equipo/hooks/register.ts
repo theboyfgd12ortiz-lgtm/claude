@@ -158,7 +158,8 @@ export const register: Register = on => {
     const ran = await next(e)
     if (e.agentId !== undefined || ran.deny !== undefined || !(await read($, isAuto))) return ran
     const tool = String(e.tool)
-    const salida = (ran.text ?? '').length
+    // `text` lo pone el núcleo; si falta (resultado puesto por otro hook), se mide el resultado.
+    const salida = ran.text?.length ?? JSON.stringify(ran.result ?? '').length
     if (tool === 'Read' || tool === 'Grep' || tool === 'Glob') {
       trabajo.lecturas += 1
       trabajo.caracteres += salida

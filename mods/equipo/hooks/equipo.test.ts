@@ -187,3 +187,12 @@ test('una interrupción no cambia el modelo de los siguientes agentes', async ($
   }
   expect(modelos).toEqual(['haiku', 'haiku', 'haiku'])
 })
+
+test('el vigilante avisa al director cuando una lectura grande pasa del límite', async ($, on) => {
+  on('clock.now', () => ({ value: 1000 }) as never)
+  on('tool.call', { tool: 'Read' } as never, (() => ({ result: { type: 'text', file: { content: 'x'.repeat(70_000) } } })) as never)
+  const r = await $.tool.call({ tool: 'Read', file_path: 'a.ts' } as never)
+  expect(r.context?.join(' ')).toMatch(/equipo:explorador/)
+  const otra = await $.tool.call({ tool: 'Read', file_path: 'b.ts' } as never)
+  expect(otra.context?.join(' ') ?? '').not.toMatch(/equipo:explorador/)
+})
