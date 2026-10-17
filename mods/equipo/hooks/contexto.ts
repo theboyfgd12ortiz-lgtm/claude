@@ -42,4 +42,4 @@ export const avisoDeTrabajo = (t: Trabajo): { tipo: 'leer' | 'editar'; texto: st
 }
 
 /** Qué debe sobrevivir a una compactación. */
-export const AVISO_COMPACTAR = 'Conserva el plan y qué pasos están hechos o pendientes.'
+export const AVISO_COMPACTAR = 'Conserva el plan y qué pasos están hechos o pendientes. Conserva también lo que se estaba haciendo justo ahora (archivos, qué falta, comandos de prueba) y las instrucciones del usuario, para seguir sin volver a preguntar.'

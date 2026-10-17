@@ -176,7 +176,10 @@ export const register: Register = on => {
 
   // Antes de compactar (sola o con /compact) se guarda la nota: así siempre se puede retomar en un chat nuevo.
   on('session.compact', async ($, e, next) => {
-    if (e.trigger !== 'precompute' && (await read($, traspasoAuto))) await guardarNota($, '', true).catch(() => undefined)
+    // Con tope de 60 s: si el resumen se demora, la compactación (y el trabajo de la noche) sigue sin esperarlo.
+    if (e.trigger !== 'precompute' && (await read($, traspasoAuto))) {
+      await Promise.race([guardarNota($, '', true).catch(() => undefined), new Promise(r => setTimeout(r, 60_000))])
+    }
 
     return next(e)
   }).catch(($, e, next) => next(e))
