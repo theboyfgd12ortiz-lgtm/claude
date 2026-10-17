@@ -7,7 +7,9 @@ import {
   ESCALERA,
   heuristica,
   leerPuntos,
+  NIVEL_NOCHE,
   NIVEL_PILOTO,
+  nivelDeMision,
   peldano,
   puntosANivel,
 
@@ -210,4 +212,27 @@ test('con la caché caliente no se cambia de modelo ni de esfuerzo por un escal�
 
 test('el mínimo del director durante una misión del piloto es un escalón de Opus', () => {
   expect(peldano(NIVEL_PILOTO).familia).toBe('opus')
+})
+
+test('modo noche: la nota no pregunta, decide con prudencia y anota la duda', () => {
+  const vago = notaDelPedido(PAGINA, true) ?? ''
+  expect(vago).toMatch(/No preguntes/)
+  expect(vago).toMatch(/resumen de la mañana/)
+  expect(vago).not.toMatch(/3 preguntas/)
+  expect(notaDelPedido(PAGINA, false)).toMatch(/3 preguntas/)
+})
+
+test('nivelDeMision: de día Opus mínimo; de noche Opus planea y Sonnet ejecuta, cambiando solo con caché perdida', () => {
+  const base = { escalado: 4, actual: 4, techo: 9, noche: false, planea: false, puedeCambiar: false, errores: 0 }
+  expect(nivelDeMision(base)).toBe(NIVEL_PILOTO)
+  // De noche, ejecutando: Sonnet. Planeando: Opus.
+  expect(nivelDeMision({ ...base, noche: true, puedeCambiar: true })).toBe(NIVEL_NOCHE)
+  expect(nivelDeMision({ ...base, noche: true, planea: true, puedeCambiar: true })).toBe(NIVEL_PILOTO)
+  // Con la caché caliente no cambia de modelo.
+  expect(nivelDeMision({ ...base, noche: true, planea: true, actual: 4 })).toBe(4)
+  expect(nivelDeMision({ ...base, noche: true, actual: 6, escalado: 6 })).toBe(6)
+  // El tope del presupuesto manda.
+  expect(nivelDeMision({ ...base, noche: true, planea: true, puedeCambiar: true, techo: 4 })).toBe(4)
+  // Con muchos errores no baja de lo escalado.
+  expect(nivelDeMision({ ...base, noche: true, puedeCambiar: true, escalado: 7, errores: 4 })).toBe(7)
 })

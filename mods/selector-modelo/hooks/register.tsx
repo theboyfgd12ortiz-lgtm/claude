@@ -136,7 +136,13 @@ async function revisar($: EngineInterface) {
     const cuando = (cinco?.percentUsed ?? 0) >= 100 ? cinco?.resetsAt : semana?.resetsAt
     const falta = faltaPara(cuando, await $.clock.now())
     if (falta !== null) {
-      $.ui.toast(`Presupuesto: se acabó el límite. Vuelve en ${duracion(falta)}; te aviso cuando puedas seguir.`)
+      // Con una misión en marcha el piloto reintenta solo al renovarse: no hay que escribir nada.
+      const sigueSolo = await misionActiva($)
+      $.ui.toast(
+        sigueSolo
+          ? `Presupuesto: se acabó el límite. Vuelve en ${duracion(falta)}; el piloto sigue solo cuando se renueve.`
+          : `Presupuesto: se acabó el límite. Vuelve en ${duracion(falta)}; te aviso cuando puedas seguir.`,
+      )
       avisoRenovacion = $.clock.after(falta + 30_000, () => {
         avisoRenovacion = undefined
         void $.ui.notify('Tu límite de uso se renovó: ya puedes seguir. Escribe /retomar para continuar donde quedaste.', { title: 'Claude Code' }).catch(() => undefined)
@@ -160,11 +166,49 @@ async function revisar($: EngineInterface) {
 /** El escalón mínimo del director mientras el piloto lleva una misión: planear, integrar y revisar con calidad; los agentes baratos hacen lo pesado. */
 export const NIVEL_PILOTO = 6
 
-/** Si el equipo tiene una misión en marcha (lee su estado; sin el mod, nunca). */
-async function misionActiva($: EngineInterface): Promise<boolean> {
+/** Lo que el selector necesita de la misión del equipo (sin el mod, nada). */
+type MisionVista = { activa?: boolean; hechos?: number; revision?: string }
+
+async function leerMision($: EngineInterface): Promise<MisionVista> {
   const r = await $.state.get({ plugin: 'equipo', key: 'mision' } as never).catch(() => undefined)
 
-  return (r as { value?: { activa?: boolean } } | undefined)?.value?.activa === true
+  return (r as { value?: MisionVista } | undefined)?.value ?? {}
+}
+
+/** Si el equipo tiene una misión en marcha (lee su estado; sin el mod, nunca). */
+async function misionActiva($: EngineInterface): Promise<boolean> {
+  return (await leerMision($)).activa === true
+}
+
+/** Si el modo noche del equipo está encendido (sin el mod, nunca). */
+async function nocheActiva($: EngineInterface): Promise<boolean> {
+  const r = await $.state.get({ plugin: 'equipo', key: 'modoNoche' } as never).catch(() => undefined)
+
+  return (r as { value?: boolean } | undefined)?.value === true
+}
+
+/** De noche el director ejecuta con Sonnet (nivel 5); Opus queda para planear y corregir. */
+export const NIVEL_NOCHE = 5
+
+/**
+ * El nivel del director durante una misión. De día: Opus mínimo (nivel 6) como siempre.
+ * De noche: Opus para planear (aún sin pasos hechos) y corregir (revisión), Sonnet para ejecutar;
+ * y solo se cambia de modelo cuando la caché ya está perdida (tras un resumen o pasados 5 minutos).
+ */
+export function nivelDeMision(a: {
+  escalado: number
+  actual: number
+  techo: number
+  noche: boolean
+  planea: boolean
+  puedeCambiar: boolean
+  errores: number
+}): number {
+  if (!a.noche) return Math.max(a.escalado, Math.min(NIVEL_PILOTO, a.techo))
+  const deseado = Math.min(a.planea ? NIVEL_PILOTO : NIVEL_NOCHE, a.techo)
+  if (familiaDe(peldano(deseado).model) !== familiaDe(peldano(a.actual).model) && !a.puedeCambiar) return a.actual
+
+  return a.errores >= ERRORES_POR_SUBIDA ? Math.max(deseado, a.escalado) : deseado
 }
 
 export function limitar(n: number, minimo: number, maximo: number): number {
@@ -370,6 +414,26 @@ async function abrirPanel($: EngineInterface) {
   await $.ui.open({ id: PANEL, title: 'Selector de modelo', rows: 24, columns: 64 })
 }
 
+// Para cambiar de modelo sin tirar la caché: se acaba de resumir, o hace rato que no hay pasos.
+let recienResumido = false
+let ultimoPaso: number | undefined
+
+// Si la ventana está muy llena la resume; tras resumir la caché ya está perdida, así que ahí se puede cambiar de modelo.
+async function resumirSiLleno($: EngineInterface): Promise<void> {
+  try {
+    const { context } = await $.session.usage()
+    if ((context.percent ?? 0) >= PORCIENTO_COMPACTAR || (context.tokens ?? 0) >= TOKENS_COMPACTAR) {
+      $.ui.toast('Conversación muy llena: la resumo para gastar menos tokens')
+      await $.session.compact({
+        instructions: 'Conserva la tarea actual, decisiones tomadas, rutas de archivos, comandos que funcionaron y lo pendiente. Descarta salidas largas de herramientas.',
+      })
+      recienResumido = true
+    }
+  } catch {
+    // Si no se puede compactar ahora, se sigue igual.
+  }
+}
+
 export const register: Register = on => {
   // Del turno en curso; un reload los pone en cero, que es lo correcto.
   let errores = 0
@@ -459,23 +523,18 @@ export const register: Register = on => {
       DE_LA_PERSONA.has(origenPedido.kind) ||
       (origenPedido.kind === 'plugin' && origenPedido.asUser === true)
     // Avisos, tareas programadas y mensajes de otras sesiones siguen con el nivel que haya.
-    if (!esDeLaPersona || texto === '' || texto.startsWith('/')) return next(e)
+    if (!esDeLaPersona || texto === '' || texto.startsWith('/')) {
+      // Los pasos que el piloto se manda solo también cuentan: de noche nadie compacta a mano.
+      if (!esDeLaPersona && texto !== '' && !texto.startsWith('/') && origenPedido?.kind === 'plugin' && !e.turnId && (await misionActiva($))) {
+        await resumirSiLleno($)
+      }
+
+      return next(e)
+    }
     skillsEnPedido = 0
 
     // Con la ventana muy llena, compactar antes de seguir: cada paso relee todo el contexto.
-    if (!e.turnId) {
-      try {
-        const { context } = await $.session.usage()
-        if ((context.percent ?? 0) >= PORCIENTO_COMPACTAR || (context.tokens ?? 0) >= TOKENS_COMPACTAR) {
-          $.ui.toast('Conversación muy llena: la resumo para gastar menos tokens')
-          await $.session.compact({
-            instructions: 'Conserva la tarea actual, decisiones tomadas, rutas de archivos, comandos que funcionaron y lo pendiente. Descarta salidas largas de herramientas.',
-          })
-        }
-      } catch {
-        // Si no se puede compactar ahora, se sigue igual.
-      }
-    }
+    if (!e.turnId) await resumirSiLleno($)
 
     const m = await read($, modo)
     const actual = await read($, nivel)
@@ -546,7 +605,7 @@ export const register: Register = on => {
     // Con el piloto en marcha el plan ya lo pide él: no se repite (y no se contradice con "pregunta antes de empezar").
     // Una sola nota por pedido (con una misión en marcha el orquestador ya pidió el plan) más, si toca, la de ahorro.
     const notas: string[] = []
-    const nota = (await misionActiva($)) ? undefined : notaDelPedido(puntos)
+    const nota = (await misionActiva($)) ? undefined : notaDelPedido(puntos, await nocheActiva($))
     if (nota !== undefined && (await read($, mejorarAuto))) {
       notas.push(nota)
       await update($, avisados, n => n + 1)
@@ -637,7 +696,16 @@ export const register: Register = on => {
     const inicial = lista[lista.length - 1]?.nivel ?? actual
     const escalado = m === 'auto' ? Math.max(actual, escalar(inicial, e.index, errores, techo)) : actual
     // Misión del piloto: el director trabaja con el modelo fuerte (sin pasar del tope del presupuesto).
-    const n = m === 'auto' && (await misionActiva($)) ? Math.max(escalado, Math.min(NIVEL_PILOTO, techo)) : escalado
+    let n = escalado
+    if (m === 'auto') {
+      const mision = await leerMision($)
+      if (mision.activa === true) {
+        const ahora = await $.clock.now()
+        const puedeCambiar = recienResumido || ultimoPaso === undefined || ahora - ultimoPaso > CACHE_MS
+        const planea = (mision.hechos ?? 0) === 0 || mision.revision === 'revisando' || mision.revision === 'corrigiendo'
+        n = nivelDeMision({ escalado, actual, techo, noche: await nocheActiva($), planea, puedeCambiar, errores })
+      }
+    }
     if (n !== actual) {
       await update($, nivel, () => n)
       await mostrar($)
@@ -646,6 +714,8 @@ export const register: Register = on => {
 
     const p = peldano(n)
     const r = yield* next({ ...e, model: p.model, effort: p.effort })
+    recienResumido = false
+    ultimoPaso = await $.clock.now()
 
     mensajes = e.messageCount
     const u = r.usage

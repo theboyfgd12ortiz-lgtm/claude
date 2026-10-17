@@ -41,5 +41,16 @@ export const avisoDeTrabajo = (t: Trabajo): { tipo: 'leer' | 'editar'; texto: st
   return undefined
 }
 
+/** Una lectura de este tamaño (caracteres) es "enorme" y, con el contexto ya caro, no debe entrar al chat caro. */
+export const LECTURA_ENORME = 60_000
+/** Contexto (tokens) a partir del cual cada byte que entra se paga muy caro en cada mensaje. */
+export const CONTEXTO_CARO = 100_000
+
+/** Mensaje de rechazo si una lectura enorme entraría a un chat caro con el contexto ya grande; undefined si puede pasar. */
+export const denegarLecturaEnorme = (a: { caracteres: number; tokens: number; haiku: boolean }): string | undefined =>
+  !a.haiku && a.caracteres >= LECTURA_ENORME && a.tokens >= CONTEXTO_CARO
+    ? `Ese archivo es muy grande (~${Math.round(a.caracteres / 4000)}k tokens) y el contexto ya lleva ~${Math.round(a.tokens / 1000)}k: cada mensaje lo volvería a pagar. Pídele a equipo:explorador que lo lea y te dé solo lo que buscas, o lee un trozo (offset y limit).`
+    : undefined
+
 /** Qué debe sobrevivir a una compactación. */
 export const AVISO_COMPACTAR = 'Conserva el plan y qué pasos están hechos o pendientes. Conserva también lo que se estaba haciendo justo ahora (archivos, qué falta, comandos de prueba) y las instrucciones del usuario, para seguir sin volver a preguntar.'

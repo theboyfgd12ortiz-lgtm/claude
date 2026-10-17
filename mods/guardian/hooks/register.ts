@@ -2,10 +2,13 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { GuardianBlock } from '../types'
-import { cambiosDesde, crearPunto, podar, restaurar, type Run } from './git'
-import { discardsWork, judgeCommand, judgePowerShell, judgeSecretPath, secretoEn } from './rules'
+import { cambiosDesde, crearPunto, podar, PUNTOS_MAX, PUNTOS_MAX_NOCHE, restaurar, type Run } from './git'
+import { discardsWork, judgeCommand, judgePowerShell, judgeSecretPath, modoNocheActivo, secretoEn, tipoDescarte } from './rules'
 
 const ASK = 'If the user explicitly wants this, ask them to run it themselves or to type /guardian off.'
+// Con el modo noche nadie contesta: Claude busca otra salida segura, anota la duda y sigue con otro paso.
+const ASK_NOCHE =
+  'Modo noche: no esperes al usuario ni le preguntes. Busca una alternativa segura; si no la hay, anota la duda en "Para ortiz" y sigue con otro paso.'
 
 const isActive = atom({ plugin: 'guardian', key: 'isActive' } as const, false)
 const isPaused = atom({ plugin: 'guardian', key: 'isPaused' } as const, false)
@@ -34,6 +37,21 @@ const correr = ($: EngineInterface): Run => async argv => {
   }
 }
 
+/** ¿Está activo el modo noche? Lo marca ~/.claude/modo-noche.json; si falta, está mal formado o no se puede leer, está apagado. */
+const esNoche = async ($: EngineInterface): Promise<boolean> => {
+  try {
+    const casa = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
+    if (casa === undefined || casa === '') return false
+
+    return modoNocheActivo(await $.fs.read(`${casa.replace(/[\\/]+$/, '')}/.claude/modo-noche.json`), await $.clock.now())
+  } catch {
+    return false
+  }
+}
+
+/** La frase final de los bloqueos: pedir ayuda a la persona, o (de noche) buscar otra salida. */
+const pedir = async ($: EngineInterface): Promise<string> => ((await esNoche($)) ? ASK_NOCHE : ASK)
+
 /** El pedido tal como lo escribió la persona (lo guarda prompt.submit antes de que otros le añadan contexto). */
 let pedidoActual = ''
 
@@ -56,11 +74,29 @@ const refuse = async (
   return { deny } as const
 }
 
+/** Anota un punto de restauración nuevo y poda los que sobran (30 de noche, 8 de día). */
+const guardarPunto = async ($: EngineInterface, id: string, pedido: string) => {
+  const nuevo = await crearPunto(correr($), id, await $.clock.now(), pedido)
+  if (nuevo === null) return null
+  const max = (await esNoche($)) ? PUNTOS_MAX_NOCHE : PUNTOS_MAX
+  const podados = await podar(correr($), [...(await read($, respaldoPuntos)), nuevo], max)
+  await update($, respaldoPuntos, () => podados)
+
+  return nuevo
+}
+
+/** Lo que decide el guardián para un comando de shell: bloquearlo o dejarlo pasar con un aviso (tras un respaldo). */
+type Veredicto = { deny: string } | { aviso: string }
+
 /** Why a shell command must be refused (a deny result), or undefined when it may run. */
-const blockShell = async ($: EngineInterface, command: string, judge: (command: string) => string | undefined) => {
+const blockShell = async (
+  $: EngineInterface,
+  command: string,
+  judge: (command: string) => string | undefined,
+): Promise<Veredicto | undefined> => {
   const why = judge(command)
   if (why !== undefined) {
-    return refuse($, command, why, `${$.plugin.name}: blocked: ${why}. ${ASK}`)
+    return refuse($, command, why, `${$.plugin.name}: blocked: ${why}. ${await pedir($)}`)
   }
 
   if (discardsWork(command)) {
@@ -70,17 +106,55 @@ const blockShell = async ($: EngineInterface, command: string, judge: (command: 
       const files = dirty.split('\n').slice(0, 8).join(', ')
       const reason = `borraría cambios sin commitear (${files})`
 
+      // Salida segura: si solo pisa archivos con cambios, se guarda un respaldo y se deja pasar.
+      if (tipoDescarte(command) === 'recuperable' && (await read($, respaldoAuto))) {
+        try {
+          const punto = await guardarPunto($, `pre-${await $.clock.now()}`, `antes de: ${command}`)
+          if (punto !== null) {
+            $.ui.toast(`guardian: respaldo antes de ${command.slice(0, 50)}`)
+
+            return {
+              aviso: `${$.plugin.name}: guardé un respaldo ("${punto.id}") antes de este comando, porque borraba cambios sin commitear. Se deshace con /respaldo.`,
+            }
+          }
+        } catch {
+          // Sin un respaldo comprobado no se deja pasar: cae al bloqueo de abajo.
+        }
+      }
+
+      const final = (await esNoche($)) ? ASK_NOCHE : `Or confirm with the user. ${ASK}`
+
       return refuse(
         $,
         command,
         reason,
-        `${$.plugin.name}: blocked: ${reason}. Commit or \`git stash\` them first, or confirm with the user. ${ASK}`,
+        `${$.plugin.name}: blocked: ${reason}. Safe alternative: \`git stash push -u\` or a commit first (new files and stashes cannot be backed up). ${final}`,
       )
     }
   }
 
   return undefined
 }
+
+/** Aplica el veredicto a una llamada de shell: bloquea, o deja pasar y añade el aviso del respaldo. */
+const juzgarShell = async (
+  $: EngineInterface,
+  command: string,
+  judge: (command: string) => string | undefined,
+  e: unknown,
+  next: (e: never) => Promise<{ deny?: string; context?: readonly string[] }>,
+) => {
+  if (await read($, isPaused)) return next(e as never)
+  const v = await blockShell($, command, judge)
+  if (v === undefined) return next(e as never)
+  if ('deny' in v) return v
+  const r = await next(e as never)
+
+  return r.deny === undefined ? { ...r, context: [...(r.context ?? []), v.aviso] } : r
+}
+
+const AVISO_SECRETO = async ($: EngineInterface, donde: string, que: string) =>
+  `guardian: no escribo ${que} en ${donde}: las claves no van dentro del código. Guárdala en un archivo .env (que no se sube) y léela desde ahí con una variable de entorno. ${(await esNoche($)) ? ASK_NOCHE : 'Si de verdad es una clave pública, avisa al usuario.'}`
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -111,11 +185,11 @@ export const register: Register = on => {
   })
 
   // Destructive shell commands: Bash, and PowerShell on Windows.
-  on('tool.call', { tool: 'Bash' }, async ($, e, next) => (await read($, isPaused) ? next(e) : ((await blockShell($, e.command, judgeCommand)) ?? next(e)))).catch(
-    ($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }),
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => juzgarShell($, e.command, judgeCommand, e, next as never) as never).catch(
+    async ($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${await pedir($)}` }),
   )
-  on('tool.call', { tool: 'PowerShell' }, async ($, e, next) => (await read($, isPaused) ? next(e) : ((await blockShell($, e.command, judgePowerShell)) ?? next(e)))).catch(
-    ($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }),
+  on('tool.call', { tool: 'PowerShell' }, async ($, e, next) => juzgarShell($, e.command, judgePowerShell, e, next as never) as never).catch(
+    async ($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${await pedir($)}` }),
   )
 
   // Secrets read into the conversation.
@@ -130,27 +204,25 @@ export const register: Register = on => {
           $,
           `Read ${e.file_path}`,
           why,
-          `${$.plugin.name}: not reading ${e.file_path}: ${why}. Refer to variable names, or use the .example file. ${ASK}`,
+          `${$.plugin.name}: not reading ${e.file_path}: ${why}. Refer to variable names, or use the .example file. ${await pedir($)}`,
         )
-  }).catch(($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }))
+  }).catch(async ($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${await pedir($)}` }))
 
   // Claves que se escribirían en un archivo del proyecto (subirlas a GitHub o a un sitio publicado las expone).
-  const AVISO_SECRETO = (donde: string, que: string) =>
-    `guardian: no escribo ${que} en ${donde}: las claves no van dentro del código. Guárdala en un archivo .env (que no se sube) y léela desde ahí con una variable de entorno. Si de verdad es una clave pública, avisa al usuario.`
 
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
     if (await read($, isPaused)) return next(e)
     const que = secretoEn(e.file_path, e.content)
 
-    return que === undefined ? next(e) : refuse($, `Write ${e.file_path}`, `iba a escribir ${que}`, AVISO_SECRETO(e.file_path, que))
-  }).catch(($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }))
+    return que === undefined ? next(e) : refuse($, `Write ${e.file_path}`, `iba a escribir ${que}`, await AVISO_SECRETO($, e.file_path, que))
+  }).catch(async ($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${await pedir($)}` }))
 
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
     if (await read($, isPaused)) return next(e)
     const que = secretoEn(e.file_path, e.new_string)
 
-    return que === undefined ? next(e) : refuse($, `Edit ${e.file_path}`, `iba a escribir ${que}`, AVISO_SECRETO(e.file_path, que))
-  }).catch(($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${ASK}` }))
+    return que === undefined ? next(e) : refuse($, `Edit ${e.file_path}`, `iba a escribir ${que}`, await AVISO_SECRETO($, e.file_path, que))
+  }).catch(async ($, e, next) => (next.called ? next(e) : { deny: `${$.plugin.name}: its safety check failed; ${await pedir($)}` }))
 
   on('prompt.submit', async ($, e, next) => {
     const quien = (e.origin as { kind?: string } | undefined)?.kind
@@ -170,7 +242,7 @@ export const register: Register = on => {
         const ultimo = lista.at(-1)
         // Si nada cambió desde el último punto, ese ya sirve.
         if (nuevo !== null && !(ultimo && ultimo.sha === nuevo.sha && ultimo.existentes.length === nuevo.existentes.length)) {
-          const podados = await podar(correr($), [...lista, nuevo])
+          const podados = await podar(correr($), [...lista, nuevo], (await esNoche($)) ? PUNTOS_MAX_NOCHE : PUNTOS_MAX)
           await update($, respaldoPuntos, () => podados)
         }
       } catch {

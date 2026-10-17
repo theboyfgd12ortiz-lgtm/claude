@@ -204,13 +204,27 @@ export const judgeSecretPath = (path: string): string | undefined =>
   SECRET_FILE.test(path) ? 'es un archivo de secretos (.env, llave privada, credenciales)' : undefined
 
 /** Commands that throw away uncommitted work. */
+/** `git -C dir`, `--git-dir=..`, `--work-tree=..` y `-c k=v` antes del subcomando: se quitan para ver qué hace el comando. */
+const sinOpcionesGit = (c: string[]): string[] => {
+  const r = [c[0] ?? '']
+  let i = 1
+  while (i < c.length) {
+    const w = c[i] ?? ''
+    if (w === '-C' || w === '-c' || w === '--git-dir' || w === '--work-tree') i += 2
+    else if (/^--(?:git-dir|work-tree)=/.test(w)) i += 1
+    else break
+  }
+
+  return [...r, ...c.slice(i)]
+}
+
 export const discardsWork = (command: string): boolean =>
   parse(command).some(({ words }) => {
     const c = commandWords(words)
 
     return (
       c[0] === 'git' &&
-      /^git\s+(reset\s+.*--hard|checkout\s+(--\s+)?\.(\s|$)|restore\s+(--\S+\s+)*\.(\s|$)|clean\s+-[a-zA-Z]*f|stash\s+(drop|clear))/.test(c.join(' '))
+      /^git\s+(reset\s+.*--hard|checkout\s+(--\s+)?\.(\s|$)|restore\s+(--\S+\s+)*\.(\s|$)|clean\s+-[a-zA-Z]*f|stash\s+(drop|clear))/.test(sinOpcionesGit(c).join(' '))
     )
   })
 
@@ -238,4 +252,46 @@ export const secretoEn = (ruta: string, texto: string): string | undefined => {
   if (/\.md$/i.test(ruta) && !/PRIVATE KEY/.test(texto)) return undefined
 
   return SECRETOS.find(s => s.patron.test(texto))?.nombre
+}
+
+/**
+ * Cómo se recupera lo que borra un comando que descarta trabajo:
+ * - 'recuperable': solo pisa archivos con cambios (reset --hard, checkout ., restore .); un respaldo lo devuelve.
+ * - 'irrecuperable': borra archivos sin seguimiento o stashes (clean, stash drop/clear); el respaldo no los guarda.
+ * undefined si el comando no descarta nada.
+ */
+export const tipoDescarte = (command: string): 'recuperable' | 'irrecuperable' | undefined => {
+  let tipo: 'recuperable' | 'irrecuperable' | undefined
+  for (const { words } of parse(command)) {
+    const c = commandWords(words)
+    if (c[0] !== 'git' || !discardsWork(c.join(' '))) continue
+    if (/^git\s+(clean|stash)/.test(c.join(' '))) return 'irrecuperable'
+    tipo = 'recuperable'
+  }
+
+  // Con `cd`, `-C` o `--git-dir`/`--work-tree` el comando actúa en otra carpeta: el respaldo del repo actual no lo cubriría.
+  if (tipo === 'recuperable' && /(?:^|[;&|(\s])cd\s|\s-C\s|--(?:git-dir|work-tree)\b/.test(command)) return 'irrecuperable'
+
+  return tipo
+}
+
+/** El modo noche está activo según el texto de ~/.claude/modo-noche.json (falta o mal formado = apagado). */
+export const modoNocheActivo = (texto: string | null | undefined, ahora?: number): boolean => {
+  if (typeof texto !== 'string') return false
+  try {
+    const dato: unknown = JSON.parse(texto)
+
+    if (typeof dato !== 'object' || dato === null || (dato as { activo?: unknown }).activo !== true) return false
+    if (ahora === undefined) return true
+    // Caduca a las 7:00 siguientes o a las 12 h de `desde` (lo que llegue antes); sin `desde` válido, ya caducó.
+    const t = Date.parse(String((dato as { desde?: unknown }).desde ?? ''))
+    if (Number.isNaN(t)) return false
+    const corte = new Date(t)
+    corte.setHours(7, 0, 0, 0)
+    if (corte.getTime() <= t) corte.setDate(corte.getDate() + 1)
+
+    return ahora < Math.min(corte.getTime(), t + 12 * 3_600_000)
+  } catch {
+    return false
+  }
 }

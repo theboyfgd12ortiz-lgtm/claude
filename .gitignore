@@ -4,3 +4,6 @@ node_modules/
 .claude/terminales/
 **/.claude/terminales/
 .claude/equipo/
+
+.claude/mision.json
+**/.claude/mision.json

@@ -41,6 +41,6 @@ export type Mision = {
 
 declare module 'claude-code' {
   interface PluginState {
-    equipo: { agentes: Registro[]; isAuto: boolean; mision: Mision; pilotoAuto: boolean }
+    equipo: { agentes: Registro[]; isAuto: boolean; mision: Mision; pilotoAuto: boolean; modoNoche: boolean }
   }
 }

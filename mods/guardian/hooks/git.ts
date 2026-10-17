@@ -7,6 +7,8 @@ export type Run = (argv: string[]) => Promise<{ code: number; out: string }>
 /** Dónde guarda git los commits ocultos, para que no los recoja la limpieza. */
 export const REF = 'refs/claude-mods/respaldo'
 export const PUNTOS_MAX = 8
+/** De noche se trabaja solo muchas horas: se guardan más puntos. */
+export const PUNTOS_MAX_NOCHE = 30
 
 const lineas = (texto: string): string[] => texto.split('\n').map(l => l.trim()).filter(l => l !== '')
 
@@ -34,9 +36,9 @@ export const crearPunto = async (run: Run, id: string, at: number, pedido: strin
 }
 
 /** Borra los puntos que sobran (los más antiguos). */
-export const podar = async (run: Run, puntos: readonly Punto[]): Promise<Punto[]> => {
-  const quedan = puntos.slice(-PUNTOS_MAX)
-  for (const p of puntos.slice(0, Math.max(0, puntos.length - PUNTOS_MAX))) await run(['git', 'update-ref', '-d', `${REF}/${p.id}`])
+export const podar = async (run: Run, puntos: readonly Punto[], max: number = PUNTOS_MAX): Promise<Punto[]> => {
+  const quedan = puntos.slice(-max)
+  for (const p of puntos.slice(0, Math.max(0, puntos.length - max))) await run(['git', 'update-ref', '-d', `${REF}/${p.id}`])
 
   return [...quedan]
 }

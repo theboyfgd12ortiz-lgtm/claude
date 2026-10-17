@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { discardsWork, judgeCommand, judgePowerShell, judgeSecretPath, secretoEn } from './rules'
+import { discardsWork, judgeCommand, judgePowerShell, judgeSecretPath, modoNocheActivo, secretoEn, tipoDescarte } from './rules'
 
 describe('rules', () => {
   test('blocks catastrophic commands', () => {
@@ -165,3 +165,101 @@ test('rechaza escribir una clave en un archivo', async ($, on) => {
   const buena = await $.tool.call({ tool: 'Write', file_path: '/r/app.js', content: 'const t = process.env.TOKEN' } as never)
   expect(buena.deny).toBeUndefined()
 })
+
+describe('modo noche y salida segura', () => {
+  test('tipoDescarte separa lo que un respaldo recupera', () => {
+    expect(tipoDescarte('git reset --hard HEAD~1')).toBe('recuperable')
+    expect(tipoDescarte('git checkout -- .')).toBe('recuperable')
+    expect(tipoDescarte('git clean -fd')).toBe('irrecuperable')
+    expect(tipoDescarte('git stash drop')).toBe('irrecuperable')
+    expect(tipoDescarte('git reset --hard && git clean -fd')).toBe('irrecuperable')
+    expect(tipoDescarte('git status')).toBeUndefined()
+  })
+
+  test('modoNocheActivo tolera archivo ausente o roto', () => {
+    expect(modoNocheActivo('{"activo":true,"desde":"2026-10-16T01:00:00Z"}')).toBe(true)
+    expect(modoNocheActivo('{"activo":false}')).toBe(false)
+    expect(modoNocheActivo('{roto')).toBe(false)
+    expect(modoNocheActivo('')).toBe(false)
+    expect(modoNocheActivo(null)).toBe(false)
+    expect(modoNocheActivo('null')).toBe(false)
+  })
+})
+
+const FIN = { isStdoutTruncated: false, isStderrTruncated: false }
+
+/** Prepara un git de mentira con cambios sin commitear, y el modo noche encendido o no. */
+const prepararGit = (on: (...a: never[]) => unknown, noche: boolean, gitOk = true) => {
+  const o = on as unknown as (e: string, h: (...a: never[]) => unknown) => void
+  const llamadas: string[] = []
+  o('env.get', (() => ({ value: 'C:/Users/x' })) as never)
+  o('fs.read', (() => {
+    if (!noche) throw new Error('no existe')
+
+    return { value: '{"activo":true,"desde":"2026-10-16T01:00:00Z"}' }
+  }) as never)
+  o('ui.toast', (() => ({ value: undefined })) as never)
+  o('process.run', ((_$: unknown, e: { argv: string[] }) => {
+    const c = e.argv.join(' ')
+    llamadas.push(c)
+    const salida = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: '', ...FIN } })
+    if (c.startsWith('git status')) return salida(' M index.html\n')
+    if (c.startsWith('git rev-parse --is-inside-work-tree')) return salida(gitOk ? 'true\n' : '', gitOk ? 0 : 128)
+    if (c.startsWith('git stash create')) return salida('abc123\n')
+    if (c.startsWith('git update-ref')) return salida('')
+
+    return salida('')
+  }) as never)
+
+  return llamadas
+}
+
+test('antes de un reset --hard guarda un respaldo y lo deja pasar', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'ran', stderr: '', interrupted: false } }))
+  const llamadas = prepararGit(on as never, false)
+
+  const r = await $.tool.call({ tool: 'Bash', command: 'git reset --hard HEAD~1' })
+  expect(r.deny).toBeUndefined()
+  expect(llamadas.some(c => c.startsWith('git update-ref refs/claude-mods/respaldo/pre-'))).toBe(true)
+  expect(JSON.stringify(r.context)).toMatch(/guardé un respaldo/)
+})
+
+test('si el respaldo falla, el reset --hard sigue bloqueado', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'ran', stderr: '', interrupted: false } }))
+  prepararGit(on as never, false, false)
+
+  const r = await $.tool.call({ tool: 'Bash', command: 'git reset --hard' })
+  expect(r.deny).toMatch(/blocked: borraría cambios/)
+  expect(r.deny).toMatch(/confirm with the user/)
+})
+
+test('git clean sigue bloqueado y de noche no manda a preguntar', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: 'ran', stderr: '', interrupted: false } }))
+  prepararGit(on as never, true)
+
+  const r = await $.tool.call({ tool: 'Bash', command: 'git clean -fd' })
+  expect(r.deny).toMatch(/Modo noche: no esperes al usuario/)
+  expect(r.deny).not.toMatch(/confirm with the user/)
+
+  const peligro = await $.tool.call({ tool: 'Bash', command: 'rm -rf /' })
+  expect(peligro.deny).toMatch(/Modo noche/)
+})
+
+test('el modo noche caduca y los respaldos no valen si el comando cambia de carpeta', () => {
+  const desde = new Date(2026, 9, 16, 23, 0, 0)
+  const txt = JSON.stringify({ activo: true, desde: desde.toISOString() })
+  expect(modoNocheActivo(txt, desde.getTime() + 3_600_000)).toBe(true)
+  expect(modoNocheActivo(txt, desde.getTime() + 9 * 3_600_000)).toBe(false)
+  expect(modoNocheActivo('{"activo":true}', desde.getTime())).toBe(false)
+  expect(tipoDescarte('git reset --hard')).toBe('recuperable')
+  expect(tipoDescarte('cd ../otro && git reset --hard')).toBe('irrecuperable')
+  expect(tipoDescarte('git -C ../otro reset --hard')).toBe('irrecuperable')
+  expect(tipoDescarte('git --work-tree=/x reset --hard')).toBe('irrecuperable')
+})
+

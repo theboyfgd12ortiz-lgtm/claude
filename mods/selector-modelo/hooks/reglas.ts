@@ -24,10 +24,15 @@ export const COMPACTAR =
  * La nota que viaja con el pedido (no en el prompt de sistema), según lo que el clasificador vio.
  * Una sola por pedido: pregunta lo esencial si el pedido es vago, y pide un plan si es grande o riesgoso.
  */
-export const notaDelPedido = (p: Puntos | null): string | undefined => {
+export const notaDelPedido = (p: Puntos | null, noche = false): string | undefined => {
   if (p === null) return undefined
   const partes: string[] = []
-  if (p.dudas >= 2 && p.alcance >= 1) {
+  if (p.dudas >= 2 && p.alcance >= 1 && noche) {
+    // Modo noche: nadie contesta, así que no se pregunta; se decide con prudencia y se anota para el resumen de la mañana.
+    partes.push(
+      'El pedido deja decisiones abiertas y es de noche: nadie va a contestar. No preguntes: decide tú con el criterio más prudente, escribe tus supuestos en una línea y sigue; anota la duda en el resumen de la mañana.',
+    )
+  } else if (p.dudas >= 2 && p.alcance >= 1) {
     partes.push(
       'El pedido deja decisiones abiertas. Empieza con una línea: qué entendiste que hay que lograr y cuándo estará listo. Si falta algo que cambie el resultado (para quién, estilo, contenido, qué debe hacer), haz como máximo 3 preguntas cortas en una sola respuesta antes de construir; si lo que falta es menor, escribe tus supuestos en una línea y sigue. Si el usuario dijo que no preguntes, no preguntes.',
     )

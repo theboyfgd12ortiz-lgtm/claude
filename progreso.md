@@ -32,3 +32,20 @@
 
 ## Problemas conocidos
 - No pude probar el cerebro global con `claude -p` (la terminal no tiene sesión iniciada); se confirmó que la opción existe en el programa.
+
+## Hecho (2026-10-16, ronda 2 equipo)
+- 1 Modo noche: `/noche [on|off]` escribe `~/.claude/modo-noche.json`; con noche el piloto y las notas dicen "decide tú con el criterio más prudente y sigue; anota la duda en el resumen"; `AskUserQuestion` se rechaza con ese mensaje (equipo y selector-modelo).
+- 2 Compactar también en pasos del piloto (selector-modelo, `resumirSiLleno`, solo con misión activa).
+- 3 Resumen de la mañana en `Desktop\resumen-de-la-manana.md`, escrito paso a paso con noche activa.
+- 4 Reintentos 1/5/15 min ante límite de 5h y errores pasajeros, con topes; para limpio con semana >= 80%.
+- 5 De noche Opus planea/corrige y Sonnet ejecuta (`nivelDeMision`); cambia de modelo solo tras un resumen o con caché fría.
+- 7 Misión en `.claude/mision.json`; al abrir ofrece retomar (`/piloto retomar`).
+- 8 Con contexto > 100k se rechazan lecturas enormes (>= 60k caracteres) fuera de Haiku.
+- Pruebas: equipo 54 pass/0 fail, selector-modelo 29 pass/0 fail; validate OK en ambos.
+### No se pudo
+- Sin ntfy (pedido de ortiz). No hay `fs.remove`: apagar la noche escribe `activo:false`.
+- El orden StopFailure vs turn.complete no se pudo comprobar: se espera 1,5 s antes de reintentar.
+- Reintentos y temporizadores solo funcionan con el PC despierto y Claude Code abierto. Guardián lo hizo otro agente.
+### Falta
+- Probar una noche real y ajustar topes.
+- Ronda 2 (correcciones del revisor): modo noche caduca (7:00 o 12 h, equipo y guardian); reintentos solo con noche activo y sin reiniciarse por mensajes del propio piloto; respaldo-y-pasar del guardian no vale con cd/-C/--git-dir/--work-tree; claves ocultas antes de escribir mision.json y el resumen; .claude/mision.json en .gitignore.
